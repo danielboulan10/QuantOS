@@ -33,7 +33,8 @@ jobs:
       # do not fail the build if a third party is having a bad day.
       - name: live data smoke test
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
-        run: pytest -m network -q || echo "network tests skipped: FRED unreachable"
+        run: |
+          pytest -m network -q || echo "network tests unavailable; continuing"
         continue-on-error: true
 
   runtime-dependency-audit:
@@ -64,8 +65,8 @@ jobs:
           quantos analyse --list
           # The data layer reaches FRED with urllib alone. If this step ever needs
           # a package installed, DDR-002 has been violated.
-          quantos analyse --series spx --start 2020-01-01 || \
-            echo "FRED unreachable from this runner; offline path still exercised by tests"
+          quantos analyse --series spx --start 2020-01-01 \
+            || echo "FRED unreachable from this runner; tests cover the offline path"
           # `quantos probability` exits 1 when a Monte Carlo estimate misses its
           # analytic value, which is correct behaviour for a verification command
           # and WRONG as a build gate: it is a statistical test, so it fails by
