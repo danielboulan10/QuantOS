@@ -335,18 +335,28 @@ def cmd_validate(args: argparse.Namespace) -> int:
     print(_heading("Backtest overfitting controls"))
     print(
         f"Simulating a research process: {n_configs} strategy configurations tested\n"
-        f"over {n_periods} daily observations. Only ONE has a real edge.\n"
+        f"over {n_periods} daily observations. Exactly ONE has a real edge, of\n"
+        f"{args.edge * 1e4:.0f} bp per day.\n"
     )
     performance = rng.standard_normal((n_periods, n_configs)) * 0.01
     truth = 3
-    performance[:, truth] += 0.0006
+    performance[:, truth] += args.edge
 
     sharpes = performance.mean(axis=0) / performance.std(axis=0, ddof=1)
     best = int(np.argmax(sharpes))
+    found_the_real_one = best == truth
     print(f"planted edge in configuration    #{truth}")
     print(f"best in-sample Sharpe found in   #{best}")
     print(f"best in-sample Sharpe (annual)   {sharpes[best] * np.sqrt(252):.3f}")
     print(f"planted config Sharpe (annual)   {sharpes[truth] * np.sqrt(252):.3f}")
+    if found_the_real_one:
+        print("  -> the search found the genuine edge; the tests below should confirm it")
+    else:
+        print(
+            f"  -> the search found NOISE: config #{best} has no edge at all, and it\n"
+            f"     beat the real one in sample. Every test below should decline to\n"
+            f"     call it significant. Try --edge 0.0025 to see the other regime."
+        )
 
     print(_heading("1. Naive vs deflated Sharpe ratio"))
     stats = sharpe_ratio_with_moments(performance[:, best])
@@ -376,6 +386,30 @@ def cmd_validate(args: argparse.Namespace) -> int:
     print(f"Hansen SPA p-value               {spa.p_value:.4f}   (best: #{spa.best_index})")
     rejected = np.nonzero(stepm(performance, n_bootstrap=500, rng=rng))[0].tolist()
     print(f"Romano-Wolf StepM rejects        {rejected}   (planted: [{truth}])")
+
+    print(_heading("What just happened"))
+    if found_the_real_one and truth in rejected:
+        print(
+            "The edge was strong enough to win in sample AND to survive every\n"
+            "correction. StepM named it by index. This is the outcome you want,\n"
+            "and it is rarer than the literature implies."
+        )
+    elif found_the_real_one:
+        print(
+            "The search found the right configuration, but the corrections still\n"
+            f"cannot certify it against {n_configs} trials. The edge is real and\n"
+            "the evidence is insufficient -- which is a legitimate finding, not a\n"
+            "failure of the tests. minimum_track_record_length() says how much\n"
+            "more data would settle it."
+        )
+    else:
+        print(
+            f"The best in-sample result was pure noise, and it beat a genuine\n"
+            f"{args.edge * 1e4:.0f}bp/day edge. Every method declined to certify it, which\n"
+            "is exactly correct. Note what the naive p-value said: 'significant'.\n"
+            "That single number, reported without the trial count, is how most\n"
+            "spurious strategies reach production."
+        )
     return 0
 
 
@@ -540,7 +574,11 @@ def cmd_demo(args: argparse.Namespace) -> int:
             },
         ),
         ("probability", cmd_probability, {"samples": 50_000, "seed": args.seed, "problem": None}),
-        ("validation", cmd_validate, {"seed": args.seed, "configurations": 200}),
+        (
+            "validation",
+            cmd_validate,
+            {"seed": args.seed, "configurations": 200, "edge": 0.0025},
+        ),
         ("portfolio", cmd_portfolio, {"seed": args.seed, "assets": 60, "train": 120}),
         (
             "execution",
@@ -617,6 +655,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("validate", help="backtest overfitting controls")
     p.add_argument("--configurations", type=int, default=500)
+    p.add_argument(
+        "--edge",
+        type=float,
+        default=0.0006,
+        help="daily drift of the one genuinely profitable configuration "
+        "(default 0.0006; try 0.0025 for a detectable edge)",
+    )
     p.add_argument("--seed", type=int, default=20240719)
     p.set_defaults(func=cmd_validate)
 

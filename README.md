@@ -61,9 +61,16 @@ build a simulator rather than download a dataset.
 **4. Backtest overfitting is treated as the default hypothesis.**
 [`validation.py`](src/quantos/strategy/validation.py) implements the deflated
 Sharpe ratio, the probability of backtest overfitting via CSCV, purged K-fold
-with an embargo, and combinatorial purged CV. A five-year track record with a 2.4
-annualised Sharpe is significant when tested once and **not significant** as the
-best of 500 attempts — `quantos validate` shows both numbers side by side.
+with an embargo, and combinatorial purged CV. `quantos validate` plants exactly
+one genuinely profitable strategy among 500 and shows what each method concludes.
+
+With a modest 6bp/day edge the search finds **pure noise** — a configuration with
+a 1.51 annualised Sharpe and no edge whatsoever, which beat the real one in
+sample. The naive p-value calls it significant at 0.0003. Deflation, PBO, White's
+Reality Check, Hansen's SPA and StepM all decline. Raise the edge
+(`--edge 0.0025`) and every method identifies the right configuration by index.
+Seeing both regimes is the point: the tools are not a formality that a good
+strategy passes, they are the difference between the two outcomes.
 
 **5. Numerical edge cases are handled, and the handling is the interesting part.**
 `implied_volatility` refuses to return a number when an option's time value falls
