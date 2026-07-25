@@ -81,6 +81,9 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "-ra",
+    # Network tests are opt-in (`pytest -m network`). A suite that depends on a
+    # third party's uptime is a suite that fails for reasons unrelated to the code.
+    "-m", "not network",
 ]
 filterwarnings = [
     "error",
@@ -90,6 +93,7 @@ filterwarnings = [
 markers = [
     "slow: tests that take more than a few seconds (deselect with '-m \"not slow\"')",
     "statistical: tests whose assertions are probabilistic; they use fixed seeds",
+    "network: tests that reach a third-party service; deselected by default",
 ]
 
 [tool.coverage.run]

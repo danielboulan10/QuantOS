@@ -29,6 +29,12 @@ jobs:
       # Doctests run as part of the suite: every worked example in every
       # docstring is executed, so documentation cannot drift from behaviour.
       - run: pytest -q --durations=15
+      # Network tests are deselected by default; run them on Linux/3.12 only, and
+      # do not fail the build if a third party is having a bad day.
+      - name: live data smoke test
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        run: pytest -m network -q || echo "network tests skipped: FRED unreachable"
+        continue-on-error: true
 
   runtime-dependency-audit:
     # Enforces DDR-002. Installs WITHOUT the test extra, so SciPy is absent, then
@@ -55,6 +61,11 @@ jobs:
           quantos options
           quantos book --operations 20000
           quantos execution
+          quantos analyse --list
+          # The data layer reaches FRED with urllib alone. If this step ever needs
+          # a package installed, DDR-002 has been violated.
+          quantos analyse --series spx --start 2020-01-01 || \
+            echo "FRED unreachable from this runner; offline path still exercised by tests"
           # `quantos probability` exits 1 when a Monte Carlo estimate misses its
           # analytic value, which is correct behaviour for a verification command
           # and WRONG as a build gate: it is a statistical test, so it fails by
@@ -114,3 +125,20 @@ jobs:
         with: { python-version: "3.12", cache: pip }
       - run: pip install -e ".[test]"
       - run: python benchmarks/run_benchmarks.py
+
+  gallery:
+    # The gallery must stay regenerable: a figure that only exists because it was
+    # committed once is a figure that will silently go stale.
+    name: gallery regenerates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -e ".[test]"
+      - run: python scripts/build_gallery.py --out /tmp/gallery
+      - name: every figure was produced
+        run: |
+          count=$(ls /tmp/gallery/*.svg | wc -l)
+          echo "generated $count figures"
+          test "$count" -ge 10

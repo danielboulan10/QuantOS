@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420" role="img" aria-label="Out-of-sample volatility as estimation error grows">
+<line x1="64.0" y1="372.0" x2="740.0" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="376.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.1009</text>
+<line x1="64.0" y1="288.0" x2="740.0" y2="288.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="292.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.12</text>
+<line x1="64.0" y1="204.0" x2="740.0" y2="204.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="208.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.1391</text>
+<line x1="64.0" y1="120.0" x2="740.0" y2="120.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="124.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.1583</text>
+<line x1="64.0" y1="36.0" x2="740.0" y2="36.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="40.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.1774</text>
+<line x1="64.0" y1="36.0" x2="64.0" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="64.0" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.05</text>
+<line x1="199.2" y1="36.0" x2="199.2" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="199.2" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.1733</text>
+<line x1="334.4" y1="36.0" x2="334.4" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="334.4" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.2967</text>
+<line x1="469.6" y1="36.0" x2="469.6" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="469.6" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.42</text>
+<line x1="604.8" y1="36.0" x2="604.8" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="604.8" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.5433</text>
+<line x1="740.0" y1="36.0" x2="740.0" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="740.0" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.6667</text>
+<polyline points="740.00,292.03 557.30,349.84 374.59,341.60 228.43,356.73 118.81,300.54 64.00,302.26" fill="none" stroke="#2b6cb0" stroke-width="1.6" stroke-linejoin="round"/>
+<polyline points="740.00,279.06 557.30,331.98 374.59,335.45 228.43,352.08 118.81,296.29 64.00,300.47" fill="none" stroke="#c05621" stroke-width="1.6" stroke-linejoin="round"/>
+<polyline points="740.00,53.89 557.30,228.15 374.59,195.84 228.43,140.66 118.81,193.43 64.00,123.36" fill="none" stroke="#2f855a" stroke-width="1.6" stroke-linejoin="round"/>
+<polyline points="740.00,223.44 557.30,293.94 374.59,244.98 228.43,227.00 118.81,226.28 64.00,172.16" fill="none" stroke="#805ad5" stroke-width="1.6" stroke-linejoin="round"/>
+<polyline points="740.00,51.27 557.30,162.14 374.59,119.08 228.43,63.13 118.81,152.31 64.00,66.32" fill="none" stroke="#b7791f" stroke-width="1.6" stroke-linejoin="round"/>
+<line x1="64" y1="36" x2="64" y2="372" stroke="#8892a0" stroke-width="1.2"/>
+<line x1="64" y1="372" x2="740" y2="372" stroke="#8892a0" stroke-width="1.2"/>
+<text x="64" y="22" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">Out-of-sample volatility as estimation error grows</text>
+<text x="402" y="412" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">N / T  (assets per observation)</text>
+<text x="14" y="204" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" transform="rotate(-90 14 204)">annualised OOS volatility</text>
+<line x1="706" y1="42" x2="722" y2="42" stroke="#2b6cb0" stroke-width="2.4"/>
+<text x="700" y="46" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">min-var (sample cov)</text>
+<line x1="706" y1="59" x2="722" y2="59" stroke="#c05621" stroke-width="2.4"/>
+<text x="700" y="63" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">min-var (Ledoit-Wolf)</text>
+<line x1="706" y1="76" x2="722" y2="76" stroke="#2f855a" stroke-width="2.4"/>
+<text x="700" y="80" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">risk parity</text>
+<line x1="706" y1="93" x2="722" y2="93" stroke="#805ad5" stroke-width="2.4"/>
+<text x="700" y="97" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">hierarchical risk parity</text>
+<line x1="706" y1="110" x2="722" y2="110" stroke="#b7791f" stroke-width="2.4"/>
+<text x="700" y="114" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">equal weight</text>
+</svg>

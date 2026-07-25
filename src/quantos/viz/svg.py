@@ -18,11 +18,12 @@ publication figures; this module is what runs by default.
 from __future__ import annotations
 
 import html
+import itertools
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 
 __all__ = ["Figure", "Theme", "book_depth_chart", "histogram", "line_chart", "scatter"]
 
@@ -156,12 +157,24 @@ class Figure:
         colour: str | None = None,
         width: float = 1.6,
         dashed: bool = False,
+        max_points: int | None = 3000,
     ) -> Figure:
-        """A polyline. NaNs break the line rather than being interpolated across."""
+        """A polyline. NaNs break the line rather than being interpolated across.
+
+        ``max_points`` decimates long series before rendering. This is not a
+        shortcut: a 760-pixel-wide chart cannot display more than about 1,500
+        distinct x positions, so emitting 20,000 coordinate pairs produces a
+        546 KB file that looks identical to a 20 KB one. Decimation uses
+        **min/max per bucket** rather than simple striding, which preserves the
+        visual envelope -- a stride can step straight over a single-sample spike
+        and silently erase the most interesting feature of a price series.
+        """
         t = self.theme
         colour = colour or t.palette[len(self._legend) % len(t.palette)]
         xa = np.asarray(x, dtype=float)
         ya = np.asarray(y, dtype=float)
+        if max_points is not None and xa.size > max_points:
+            xa, ya = _decimate_min_max(xa, ya, max_points)
 
         segments: list[list[str]] = [[]]
         for xi, yi in zip(xa, ya, strict=False):
@@ -323,6 +336,36 @@ class Figure:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(self.render(), encoding="utf-8")
         return str(target)
+
+
+def _decimate_min_max(
+    x: NDArray[np.float64], y: NDArray[np.float64], max_points: int
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Reduce a series to ~``max_points`` while preserving its envelope.
+
+    The series is split into buckets and each contributes its minimum and its
+    maximum, in the order they occurred. Extremes therefore survive, which is
+    exactly what plain striding fails to guarantee.
+    """
+    n = x.size
+    buckets = max(1, max_points // 2)
+    edges = np.linspace(0, n, buckets + 1).astype(int)
+    keep: list[int] = [0]
+    for start, stop in itertools.pairwise(edges):
+        if stop <= start:
+            continue
+        segment = y[start:stop]
+        finite = np.isfinite(segment)
+        if not np.any(finite):
+            keep.append(start)
+            continue
+        offsets = np.nonzero(finite)[0]
+        lo = start + int(offsets[np.argmin(segment[offsets])])
+        hi = start + int(offsets[np.argmax(segment[offsets])])
+        keep.extend(sorted((lo, hi)))
+    keep.append(n - 1)
+    index = np.unique(np.asarray(keep, dtype=int))
+    return x[index], y[index]
 
 
 def _format_tick(value: float) -> str:

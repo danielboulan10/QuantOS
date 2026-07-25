@@ -519,6 +519,237 @@ def cmd_execution(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_analyse(args: argparse.Namespace) -> int:
+    """Run the QuantOS toolkit over real market and macroeconomic series."""
+    import numpy as np
+
+    from quantos.data.analysis import analyse_cross_section, analyse_series
+    from quantos.data.catalog import BUNDLES, CATALOG, Kind, describe_bundle, resolve
+    from quantos.data.fred import FredClient, FredError
+    from quantos.data.loader import align
+
+    if args.list:
+        print(_heading("Catalogued series"))
+        print(f"{'key':<16}{'FRED id':<16}{'kind':<8}name")
+        print("-" * 78)
+        for key, series in sorted(CATALOG.items()):
+            print(f"{key:<16}{series.fred_id:<16}{series.kind.value:<8}{series.name}")
+        print(_heading("Bundles"))
+        for name, (description, members) in sorted(BUNDLES.items()):
+            print(f"  {name:<16}{', '.join(members)}")
+            print(f"  {'':<16}{description}")
+        print(
+            "\nIndividual stocks and ETFs are not on FRED. Download a CSV and pass\n"
+            "--csv PATH.csv (Yahoo Finance's Download button works as-is)."
+        )
+        return 0
+
+    keys: list[str] = []
+    if args.bundle:
+        if args.bundle not in BUNDLES:
+            print(f"unknown bundle {args.bundle!r}; choose from {', '.join(sorted(BUNDLES))}")
+            return 2
+        keys = list(BUNDLES[args.bundle][1])
+    if args.series:
+        keys.extend(s.strip() for s in args.series.split(",") if s.strip())
+    if not keys and not args.csv:
+        keys = list(BUNDLES["risk-appetite"][1])
+
+    print(_heading("QuantOS on real data"))
+    if args.bundle:
+        print(f"bundle: {args.bundle} -- {describe_bundle(args.bundle)}\n")
+    print(f"window: from {args.start}\n")
+
+    client = FredClient(offline=args.offline)
+    loaded: dict[str, tuple] = {}
+
+    for key in keys:
+        try:
+            spec = resolve(key)
+        except KeyError as error:
+            print(f"  skipping {key}: {error}")
+            continue
+        try:
+            fetched = client.get(spec.fred_id).since(args.start)
+        except FredError as error:
+            print(f"  skipping {spec.name}: {error}")
+            continue
+        if len(fetched) < 60:
+            print(f"  skipping {spec.name}: only {len(fetched)} observations after {args.start}")
+            continue
+        loaded[spec.key] = (spec, fetched.dates, fetched.values)
+
+    if args.csv:
+        from quantos.data.loader import load_ohlcv_csv
+
+        for path in args.csv.split(","):
+            try:
+                price = load_ohlcv_csv(path.strip()).since(args.start)
+            except ValueError as error:
+                print(f"  skipping {path}: {error}")
+                continue
+            from quantos.data.catalog import Series as CatalogSeries
+
+            spec = CatalogSeries(
+                key=price.symbol.lower(),
+                fred_id=price.symbol,
+                name=price.symbol,
+                kind=Kind.LEVEL,
+                reads_as=f"loaded from {path.strip()}",
+            )
+            loaded[spec.key] = (spec, price.dates, price.prices)
+            adjusted = price.detail.get("dividend_adjusted") == "True"
+            print(
+                f"  loaded {price.symbol}: {len(price)} rows from column "
+                f"'{price.price_column}'"
+                + ("" if adjusted else "  [NOT dividend-adjusted -- returns will be biased]")
+            )
+
+    if not loaded:
+        print("\nno series could be loaded.")
+        return 1
+
+    reports = []
+    for key, (spec, dates, values) in loaded.items():
+        report = analyse_series(key, spec.name, spec.kind.value, dates, values)
+        reports.append((spec, report))
+
+    for spec, report in reports:
+        print(_heading(f"{report.name}  [{spec.fred_id}]"))
+        print(f"  {spec.reads_as}")
+        print(
+            f"  {report.n_observations:,} observations, {report.start} to {report.end}, "
+            f"latest {report.latest:,.4g}"
+        )
+        print()
+        # Units matter here. A *level* series has returns, so percentages are
+        # right. A *rate* or non-tradeable index has first differences measured
+        # in the units of the series itself -- annualising those by sqrt(252) and
+        # printing "%" produced "VIX annualised volatility 128%", which reads as
+        # a return and is not one.
+        is_return = np.isfinite(report.sharpe)
+        if np.isfinite(report.annualised_return):
+            print(f"  annualised return      {report.annualised_return:>10.2%}")
+        if is_return:
+            print(f"  annualised volatility  {report.annualised_volatility:>10.2%}")
+            print(f"  Sharpe ratio           {report.sharpe:>10.3f}")
+            print(f"    autocorr-adjusted    {report.sharpe_autocorr_adjusted:>10.3f}")
+            print(f"  maximum drawdown       {report.max_drawdown:>10.2%}")
+            print(f"  VaR 95% / CVaR 95%     {report.var_95:>10.2%} / {report.cvar_95:.2%}")
+            print(f"  VaR 99% / CVaR 99%     {report.var_99:>10.2%} / {report.cvar_99:.2%}")
+        else:
+            unit = "index pts" if spec.kind is Kind.INDEX else "pp"
+            daily = report.annualised_volatility / np.sqrt(252.0)
+            print(f"  daily change, std dev  {daily:>10.4f} {unit}")
+            print(f"  annualised             {report.annualised_volatility:>10.4f} {unit}")
+            print(f"  VaR 95% / CVaR 95%     {report.var_95:>10.4f} / {report.cvar_95:.4f} {unit}")
+            print(f"  VaR 99% / CVaR 99%     {report.var_99:>10.4f} / {report.cvar_99:.4f} {unit}")
+        print(f"    {report.tail_severity}")
+        print(f"  skew / excess kurtosis {report.skewness:>10.2f} / {report.excess_kurtosis:.2f}")
+        print(f"  Hill tail index        {report.tail_index:>10.2f}   (empirical equities ~3)")
+        print(f"  Jarque-Bera p-value    {report.jarque_bera_p:>10.3g}")
+        if np.isfinite(report.garch_persistence):
+            print()
+            print(
+                f"  GARCH(1,1)             alpha {report.garch_alpha:.3f}  "
+                f"beta {report.garch_beta:.3f}  persistence {report.garch_persistence:.4f}"
+            )
+            print(f"    shock half-life      {report.garch_half_life:>10.1f} days")
+            if is_return:
+                print(f"    1-step vol forecast  {report.volatility_forecast:>10.2%} annualised")
+            else:
+                unit = "index pts" if spec.kind is Kind.INDEX else "pp"
+                print(
+                    f"    1-step vol forecast  {report.volatility_forecast:>10.4f} "
+                    f"{unit} annualised"
+                )
+        print()
+        print(f"  stationarity           {report.stationarity_verdict}")
+        for note in report.notes:
+            print(f"  note: {note}")
+
+    if len(loaded) > 1:
+        common, aligned = align({k: (d, v) for k, (_, d, v) in loaded.items()})
+        if common.size > 60:
+            transformed = {}
+            levels = {}
+            for key, (spec, _, _) in loaded.items():
+                try:
+                    transformed[key] = spec.transform(aligned[key])
+                except ValueError:
+                    transformed[key] = np.diff(aligned[key])
+                if spec.kind is Kind.LEVEL:
+                    levels[key] = aligned[key]
+
+            cross = analyse_cross_section(transformed, levels, dates=common)
+            print(_heading("Cross-series"))
+            print(f"  {cross.n_common_dates:,} common dates, {cross.start} to {cross.end}\n")
+            width = max(len(n) for n in cross.names) + 2
+            print(" " * width + "".join(f"{n[:9]:>11}" for n in cross.names))
+            for i, name in enumerate(cross.names):
+                row = "".join(f"{cross.correlation[i, j]:>11.3f}" for j in range(len(cross.names)))
+                print(f"{name:<{width}}{row}")
+            a, b, value = cross.most_correlated()
+            if a:
+                print(f"\n  strongest pair: {a} / {b} at {value:+.3f}")
+            if cross.cointegration:
+                print("\n  cointegration (Engle-Granger, both directions):")
+                for (x, y), (is_coint, stat, beta) in cross.cointegration.items():
+                    verdict = "COINTEGRATED" if is_coint else "not cointegrated"
+                    print(f"    {x:<12} / {y:<12} stat {stat:>7.3f}  beta {beta:>8.4f}  {verdict}")
+        else:
+            print(_heading("Cross-series"))
+            print(f"  only {common.size} common dates -- too few to compare.")
+            print("  Series with different frequencies (daily vs monthly) rarely align.")
+
+    if args.output:
+        _write_analysis_charts(loaded, Path(args.output))
+        print(f"\ncharts written to {args.output}")
+
+    print(_heading("Caveats"))
+    print(
+        "  Data: Federal Reserve Bank of St. Louis (FRED), retrieved and cached\n"
+        "  locally. These are historical statistics, not forecasts, and nothing\n"
+        "  here is investment advice. Sharpe ratios computed on an index exclude\n"
+        "  dividends, financing and transaction costs."
+    )
+    return 0
+
+
+def _write_analysis_charts(loaded: dict, directory: Path) -> None:
+    """Emit SVG charts for a real-data analysis."""
+    import numpy as np
+
+    from quantos.viz.svg import histogram, line_chart
+
+    directory.mkdir(parents=True, exist_ok=True)
+    for key, (spec, dates, values) in loaded.items():
+        x = np.arange(values.size, dtype=np.float64)
+        line_chart(
+            {spec.name: (x, values)},
+            title=f"{spec.name} ({spec.fred_id})",
+            x_label=f"observations, {str(dates[0])[:10]} to {str(dates[-1])[:10]}",
+            y_label=spec.kind.value,
+        ).save(str(directory / f"{key}_level.svg"))
+
+        try:
+            changes = spec.transform(values)
+        except ValueError:
+            changes = np.diff(values)
+        if changes.size > 200:
+            standardised = (changes - changes.mean()) / changes.std()
+            grid = np.linspace(-6, 6, 300)
+            normal = np.exp(-0.5 * grid**2) / np.sqrt(2 * np.pi)
+            histogram(
+                standardised,
+                bins=70,
+                density=True,
+                title=f"{spec.name}: distribution of changes vs Gaussian",
+                x_label="standardised change",
+                overlay={"N(0,1)": (grid, normal)},
+            ).save(str(directory / f"{key}_distribution.svg"))
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Import every module and report the environment."""
     import importlib
@@ -680,6 +911,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--horizon", type=float, default=1.0)
     p.add_argument("--volatility", type=float, default=0.02)
     p.set_defaults(func=cmd_execution)
+
+    p = sub.add_parser("analyse", help="run the toolkit on real market/macro data")
+    p.add_argument(
+        "--bundle",
+        default=None,
+        help="a named bundle: equity, rates, risk-appetite, inflation, macro, crossasset",
+    )
+    p.add_argument(
+        "--series",
+        default=None,
+        help="comma-separated catalogue keys or raw FRED ids (e.g. spx,vix,DGS10)",
+    )
+    p.add_argument(
+        "--csv", default=None, help="comma-separated CSV files for stocks/ETFs FRED does not carry"
+    )
+    p.add_argument("--start", default="2015-01-01", help="earliest date to include")
+    p.add_argument("--list", action="store_true", help="list the catalogue and exit")
+    p.add_argument("--offline", action="store_true", help="use only cached data")
+    p.add_argument("--output", default=None, help="directory for SVG charts")
+    p.set_defaults(func=cmd_analyse)
 
     p = sub.add_parser("doctor", help="environment and import check")
     p.set_defaults(func=cmd_doctor)

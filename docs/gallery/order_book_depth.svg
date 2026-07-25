@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420" role="img" aria-label="Limit order book: cumulative depth">
+<line x1="64.0" y1="372.0" x2="740.0" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="376.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">-48.7</text>
+<line x1="64.0" y1="288.0" x2="740.0" y2="288.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="292.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">218.9</text>
+<line x1="64.0" y1="204.0" x2="740.0" y2="204.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="208.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">486.5</text>
+<line x1="64.0" y1="120.0" x2="740.0" y2="120.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="124.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">754.1</text>
+<line x1="64.0" y1="36.0" x2="740.0" y2="36.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="40.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">1,022</text>
+<line x1="64.0" y1="36.0" x2="64.0" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="64.0" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">9,947</text>
+<line x1="199.2" y1="36.0" x2="199.2" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="199.2" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">9,966</text>
+<line x1="334.4" y1="36.0" x2="334.4" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="334.4" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">9,985</text>
+<line x1="469.6" y1="36.0" x2="469.6" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="469.6" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">10,005</text>
+<line x1="604.8" y1="36.0" x2="604.8" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="604.8" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">10,024</text>
+<line x1="740.0" y1="36.0" x2="740.0" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="740.0" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">10,043</text>
+<polyline points="514.67,206.98 507.62,142.63 500.58,130.38 493.54,122.53 486.50,111.23 479.46,105.90 472.42,104.33 465.38,94.28 458.33,86.75 451.29,84.55 437.21,80.47 430.17,78.27 423.12,76.07 416.08,75.13 409.04,65.71 402.00,61.95 394.96,58.18 380.88,54.73 373.83,53.47 64.00,51.27" fill="none" stroke="#2f855a" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="542.83,355.47 556.92,295.20 563.96,231.78 571.00,190.03 578.04,167.43 585.08,163.66 592.12,149.53 599.17,138.23 606.21,131.33 613.25,127.56 620.29,117.83 627.33,111.86 641.42,105.58 662.54,104.64 669.58,102.44 676.62,101.82 697.75,101.19 740.00,99.30" fill="none" stroke="#c53030" stroke-width="2.2" stroke-linejoin="round"/>
+<line x1="64" y1="36" x2="64" y2="372" stroke="#8892a0" stroke-width="1.2"/>
+<line x1="64" y1="372" x2="740" y2="372" stroke="#8892a0" stroke-width="1.2"/>
+<text x="64" y="22" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">Limit order book: cumulative depth</text>
+<text x="402" y="412" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">price (ticks)</text>
+<text x="14" y="204" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" transform="rotate(-90 14 204)">cumulative size</text>
+<line x1="706" y1="42" x2="722" y2="42" stroke="#2f855a" stroke-width="2.4"/>
+<text x="700" y="46" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">bids</text>
+<line x1="706" y1="59" x2="722" y2="59" stroke="#c53030" stroke-width="2.4"/>
+<text x="700" y="63" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">asks</text>
+</svg>

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420" role="img" aria-label="The same track record, judged against N trials">
+<line x1="64.0" y1="372.0" x2="740.0" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="376.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">-0.0269</text>
+<line x1="64.0" y1="288.0" x2="740.0" y2="288.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="292.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.121</text>
+<line x1="64.0" y1="204.0" x2="740.0" y2="204.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="208.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.2688</text>
+<line x1="64.0" y1="120.0" x2="740.0" y2="120.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="124.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.4166</text>
+<line x1="64.0" y1="36.0" x2="740.0" y2="36.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="56.0" y="40.0" text-anchor="end" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0.5645</text>
+<line x1="64.0" y1="36.0" x2="64.0" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="64.0" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">0</text>
+<line x1="199.2" y1="36.0" x2="199.2" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="199.2" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">1.00</text>
+<line x1="334.4" y1="36.0" x2="334.4" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="334.4" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">2.00</text>
+<line x1="469.6" y1="36.0" x2="469.6" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="469.6" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">3.00</text>
+<line x1="604.8" y1="36.0" x2="604.8" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="604.8" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">4.00</text>
+<line x1="740.0" y1="36.0" x2="740.0" y2="372.0" stroke="#e2e6ec" stroke-width="1"/>
+<text x="740.0" y="390.0" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">5.00</text>
+<polyline points="64.00,356.72 104.70,356.68 128.51,356.56 145.40,356.39 158.50,356.18 178.26,355.70 199.20,354.88 218.96,353.74 236.89,352.30 253.00,350.62 271.06,348.24 288.80,345.32 306.33,341.81 323.46,337.71 341.05,332.78 358.60,327.08 375.97,320.65 393.15,313.49 410.58,305.42 427.95,296.57 445.29,286.94 462.63,276.54 479.96,265.40 497.31,253.57 514.65,241.09 531.99,228.04 549.33,214.47 566.66,200.45 584.00,186.05 601.33,171.35 618.66,156.41 636.00,141.31 653.33,126.13 670.66,110.93 688.00,95.78 705.33,80.75 722.67,65.90 740.00,51.27" fill="none" stroke="#2b6cb0" stroke-width="2.4" stroke-linejoin="round"/>
+<line x1="64.0" y1="328.3" x2="740.0" y2="328.3" stroke="#a0aec0" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="736.0" y="323.3" text-anchor="end" fill="#a0aec0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10">5% significance</text>
+<line x1="64" y1="36" x2="64" y2="372" stroke="#8892a0" stroke-width="1.2"/>
+<line x1="64" y1="372" x2="740" y2="372" stroke="#8892a0" stroke-width="1.2"/>
+<text x="64" y="22" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">The same track record, judged against N trials</text>
+<text x="402" y="412" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">number of configurations tried (log scale)</text>
+<text x="14" y="204" text-anchor="middle" fill="#3c4450" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" transform="rotate(-90 14 204)">deflated Sharpe p-value</text>
+</svg>
