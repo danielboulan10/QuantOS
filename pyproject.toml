@@ -1,0 +1,188 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quantos"
+version = "1.0.0"
+description = "A quantitative research platform: exchange simulation, microstructure research, and backtest-overfitting controls."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+keywords = [
+    "quantitative-finance",
+    "market-microstructure",
+    "limit-order-book",
+    "agent-based-simulation",
+    "backtesting",
+    "options-pricing",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Typing :: Typed",
+]
+
+# The entire runtime dependency set. See docs/ddr/DDR-002 for why SciPy is not
+# here: it is a test-only oracle, and every special function, statistical test,
+# optimiser and root finder QuantOS needs is implemented in quantos.core and
+# validated against it.
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+# SciPy appears ONLY here. It is the independent oracle the test suite compares
+# quantos.core.special and quantos.core.stats against. If it ever appears in
+# [project.dependencies], DDR-002 has been violated.
+test = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "hypothesis>=6.90",
+    "scipy>=1.11",
+]
+viz = ["matplotlib>=3.7"]
+dev = [
+    "quantos[test,viz]",
+    "ruff>=0.4",
+    "mypy>=1.8",
+    "pre-commit>=3.6",
+]
+
+[project.scripts]
+quantos = "quantos.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/quantos-project/quantos"
+Documentation = "https://github.com/quantos-project/quantos/tree/main/docs"
+Source = "https://github.com/quantos-project/quantos"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quantos"]
+
+# --------------------------------------------------------------------------- #
+# Test configuration
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+minversion = "7.4"
+testpaths = ["tests", "src/quantos"]
+# Doctests are run as part of the suite. Every worked example in a docstring is
+# therefore executable and verified, which is what stops documentation drifting
+# away from behaviour -- several wrong values in this repository were caught
+# exactly this way.
+addopts = [
+    "--doctest-modules",
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+filterwarnings = [
+    "error",
+    # NumPy legitimately warns on operations we guard with np.where afterwards.
+    "default::RuntimeWarning",
+]
+markers = [
+    "slow: tests that take more than a few seconds (deselect with '-m \"not slow\"')",
+    "statistical: tests whose assertions are probabilistic; they use fixed seeds",
+]
+
+[tool.coverage.run]
+source = ["src/quantos"]
+branch = true
+# No omissions: every shipped module is covered.
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "\\.\\.\\.",
+]
+precision = 1
+
+# --------------------------------------------------------------------------- #
+# Linting and typing
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "C4",        # comprehensions
+    "SIM",       # simplify
+    "RUF",       # ruff-specific
+    "NPY",       # numpy-specific
+    "PL",        # pylint
+    "ANN",       # annotations
+    "D",         # pydocstyle
+]
+# Each ignore is a deliberate choice with a reason, not a silenced warning.
+# Rules NOT listed here are enforced, including the whole of pyflakes, bugbear,
+# and the numpy-specific set.
+ignore = [
+    "D203",    # conflicts with D211 (ruff flags both; D211 is the modern choice)
+    "D213",    # conflicts with D212
+    "ANN401",  # Any is occasionally the honest annotation
+    "PLR0913", # pricing and optimisation functions genuinely take many arguments
+    "PLR0917", # ditto for positional ones
+    "PLR2004", # "magic" numbers in numerical code ARE the published constants
+    "PLR0912", # branch count: the numerical branch analysis IS the algorithm
+    "PLR0915", # ditto for statement count
+    "E741",    # `l` is standard notation for a level/lambda in this domain
+    "N803",    # mathematical notation: X for a design matrix, T for a horizon
+    "N806",    # ditto for local variables
+    "N818",    # ConvergenceError/BookError read better than ...Exception
+    # Docstring rules we deliberately decline:
+    "D102",    # trivial properties on a thoroughly-documented class do not each
+               # need a docstring; the class docstring carries the explanation,
+               # and 166 one-line "Return the mean." stubs would obscure it
+    "D105",    # ditto for __repr__/__len__/__contains__
+    "D104",    # __init__.py files are namespace declarations, not documentation
+    "D401",    # our docstrings use "Purpose/Method/Inputs" sections rather than
+               # imperative mood, which is more informative for numerical code
+    # Architectural:
+    "PLC0415", # function-level imports are REQUIRED here: the dependency graph in
+               # docs/ers/ERS-001 points inward, and lazy imports are what keep
+               # core <- exchange <- sim acyclic while letting core.distributions
+               # reach core.optimize.roots for its quantile solvers
+    "B008",    # np.random.default_rng() as a dataclass default is intentional and
+               # documented at each site; these objects are never mutated in place
+    "RUF009",  # same reasoning as B008
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "ANN", "PLR2004", "S101"]
+"benchmarks/*" = ["D", "ANN", "T201"]
+"scripts/*" = ["D", "ANN", "T201"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/quantos"]
+strict = true
+warn_unreachable = true
+# NumPy's own stubs are not strict-clean for the array-protocol overloads we use,
+# so untyped numpy internals are tolerated while our own code is not.
+disallow_any_generics = false
+plugins = []
+
+[[tool.mypy.overrides]]
+module = ["tests.*", "benchmarks.*", "scripts.*"]
+ignore_errors = true

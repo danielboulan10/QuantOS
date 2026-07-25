@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.venv*/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.DS_Store
+# Example figures ARE checked in: they are referenced from the README and
+# regenerable with `quantos simulate --output docs/figures`.
+!docs/figures/.gitkeep
+
+.hypothesis/
+.coverage
