@@ -750,6 +750,121 @@ def _write_analysis_charts(loaded: dict, directory: Path) -> None:
             ).save(str(directory / f"{key}_distribution.svg"))
 
 
+def cmd_research(args: argparse.Namespace) -> int:
+    """Produce a full research report on one instrument."""
+    import numpy as np
+
+    from quantos.data.catalog import Kind, resolve
+    from quantos.data.fred import FredClient, FredError
+    from quantos.data.loader import align, load_ohlcv_csv
+    from quantos.research.instruments import AssetClass, Instrument
+    from quantos.research.render import render_markdown, render_text
+    from quantos.research.report import generate_report
+
+    client = FredClient(offline=args.offline)
+    instrument: Instrument
+
+    if args.csv:
+        try:
+            price = load_ohlcv_csv(args.csv, symbol=args.symbol).since(args.start)
+        except ValueError as error:
+            print(f"could not load {args.csv}: {error}")
+            return 1
+        instrument = Instrument(
+            symbol=price.symbol,
+            asset_class=AssetClass(args.asset_class),
+            dates=price.dates,
+            prices=price.prices,
+            source=price.source,
+            dividend_adjusted=price.detail.get("dividend_adjusted") == "True",
+            average_daily_volume=(
+                float(np.mean(price.volume)) if price.volume is not None else None
+            ),
+        )
+    elif args.series:
+        try:
+            spec = resolve(args.series)
+            fetched = client.get(spec.fred_id).since(args.start)
+        except (KeyError, FredError) as error:
+            print(f"could not load {args.series}: {error}")
+            return 1
+        mapping = {
+            Kind.LEVEL: AssetClass.INDEX,
+            Kind.INDEX: AssetClass.INDEX,
+            Kind.RATE: AssetClass.RATE,
+        }
+        instrument = Instrument(
+            symbol=spec.fred_id,
+            name=spec.name,
+            asset_class=mapping[spec.kind],
+            dates=fetched.dates,
+            prices=fetched.values,
+            source=f"FRED:{spec.fred_id}",
+            dividend_adjusted=True,
+        )
+    else:
+        print("supply --csv PATH or --series KEY. See `quantos analyse --list`.")
+        return 2
+
+    if len(instrument) < 60:
+        print(f"only {len(instrument)} observations after {args.start}; need 60+")
+        return 1
+
+    factors: dict[str, np.ndarray] = {}
+    if not args.no_factors:
+        wanted = {"market": "SP500", "rates_10y": "DGS10", "credit_hy": "BAMLH0A0HYM2"}
+        raw = {}
+        for label, fred_id in wanted.items():
+            try:
+                raw[label] = client.get(fred_id).since(args.start)
+            except FredError:
+                continue
+        if raw:
+            payload = {"instrument": (instrument.dates, instrument.prices)}
+            payload.update({k: (v.dates, v.values) for k, v in raw.items()})
+            common, aligned = align(payload)
+            if common.size > 150:
+                if common.size < len(instrument) * 0.8:
+                    print(
+                        f"  note: factor alignment truncated the sample from "
+                        f"{len(instrument):,} to {common.size:,} observations, "
+                        f"because the shortest factor series starts later. Pass "
+                        f"--no-factors to analyse the full history."
+                    )
+                instrument = Instrument(
+                    symbol=instrument.symbol,
+                    name=instrument.name,
+                    asset_class=instrument.asset_class,
+                    dates=common,
+                    prices=aligned["instrument"],
+                    source=instrument.source,
+                    dividend_adjusted=instrument.dividend_adjusted,
+                    average_daily_volume=instrument.average_daily_volume,
+                )
+                for label in raw:
+                    values = aligned[label]
+                    factors[label] = (
+                        np.diff(np.log(np.maximum(values, 1e-300)))
+                        if label == "market"
+                        else np.diff(values)
+                    )
+
+    report = generate_report(
+        instrument,
+        factors=factors or None,
+        run_signals=not args.no_signals,
+        transaction_cost_bps=args.cost_bps,
+    )
+    print(render_text(report))
+
+    if args.markdown:
+        path = Path(args.markdown)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(render_markdown(report), encoding="utf-8")
+        print(f"\nMarkdown report written to {path}")
+    return 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Import every module and report the environment."""
     import importlib
@@ -931,6 +1046,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--offline", action="store_true", help="use only cached data")
     p.add_argument("--output", default=None, help="directory for SVG charts")
     p.set_defaults(func=cmd_analyse)
+
+    p = sub.add_parser("research", help="full research report on one instrument")
+    p.add_argument("--csv", default=None, help="CSV file for a stock, ETF or future")
+    p.add_argument("--series", default=None, help="a catalogue key or FRED id")
+    p.add_argument("--symbol", default=None, help="override the symbol name")
+    p.add_argument(
+        "--asset-class",
+        default="equity",
+        choices=["equity", "etf", "index", "rate", "future", "commodity", "fx"],
+        help="what kind of instrument the CSV holds",
+    )
+    p.add_argument("--start", default="2015-01-01")
+    p.add_argument(
+        "--cost-bps", type=float, default=5.0, help="round-trip cost charged to every signal"
+    )
+    p.add_argument("--no-signals", action="store_true", help="skip the signal battery")
+    p.add_argument("--no-factors", action="store_true", help="skip the factor regression")
+    p.add_argument("--markdown", default=None, help="also write a Markdown report here")
+    p.add_argument("--offline", action="store_true")
+    p.set_defaults(func=cmd_research)
 
     p = sub.add_parser("doctor", help="environment and import check")
     p.set_defaults(func=cmd_doctor)

@@ -14,11 +14,75 @@ in [DDR-002](docs/ddr/DDR-002-numpy-only-runtime.md).
 ```bash
 pip install -e ".[test]"
 
+quantos research --csv AAPL.csv           # full research report on any instrument
+quantos research --series spx             # or anything on FRED
 quantos demo                              # tour every subsystem, ~2 minutes
-quantos analyse --bundle risk-appetite    # live FRED data, full statistical report
-quantos analyse --csv AAPL.csv            # any stock or ETF you have a CSV for
-pytest                                    # 431 tests, incl. every docstring example
+pytest                                    # 489 tests, incl. every docstring example
 ```
+
+## `quantos research` — one instrument in, a full report out
+
+Plug in a stock, ETF, index, rate, future or commodity. The tool runs every
+analysis that *applies to that asset class*, skips the ones that do not, and says
+why — an option does not get a Sharpe ratio, because its return distribution is
+dominated by payoff convexity rather than by any edge.
+
+```console
+$ quantos research --csv SPY.csv --asset-class etf
+
+RETURN DISTRIBUTION      annualised vol 18.10%, skew -0.65, excess kurtosis 16.8
+                         Hill tail index 2.57  ->  fat-tailed; Gaussian VaR understates
+RISK                     Sharpe 0.61  (standard error 0.40  ->  NOT distinguishable from zero)
+                         max drawdown -33.92%, 340 days underwater
+                         VaR/CVaR 99%: 3.44% / 5.16%   ->  CVaR/VaR = 1.50
+VOLATILITY               Engle ARCH-LM p = 7e-164  ->  clustering is real, fit GARCH
+                         persistence 0.9723, shock half-life 24.7 days
+                         leverage gamma 0.214  ->  down moves raise vol more than up
+REGIMES                  8 volatility regimes since 2015, identified without look-ahead
+FACTORS                  rates_10y beta -3.79 (t -6.7), credit_hy beta -8.82 (t -11.9)
+                         56% idiosyncratic
+SIGNALS                  9 pre-registered signals, all corrected for multiple testing
+OPTIONS                  30-day strike ladder with all Greeks at realised vol
+EXECUTION                square-root impact cost by participation rate
+```
+
+### The signal battery is the point
+
+Any tool can compute a momentum score. The hard part is knowing which signal
+survives the fact that you computed nine of them. So every signal is reported
+with its **deflated Sharpe ratio**, a purged out-of-sample Sharpe, and whether it
+survives a **Hansen SPA test** run over the battery jointly:
+
+```
+  signal                  IS Sharpe  deflated p  OOS Sharpe  turnover  verdict
+  vol_scaled_momentum         0.434       0.568       0.188       0.5  no evidence
+  momentum_252d               0.306       0.712       0.422       4.5  no evidence
+  mean_reversion_21d          0.234       0.781       0.335      37.5  no evidence
+  ...
+  Hansen SPA over the battery   p = 0.3800
+  -> nothing survives correction for multiple testing.
+```
+
+**On a liquid instrument, nothing will survive. That is the correct answer.** The
+battery is calibrated: given AR(0.35) momentum it finds a 2.27 Sharpe at p<0.0001,
+and given a random walk it finds nothing. A detector that never fires is useless;
+one that always fires is worse.
+
+The battery is **pre-registered** — its size is fixed in source before any data is
+seen, which is the condition under which the deflation correction is valid. A tool
+that let you keep adding signals until one looked good would invalidate its own
+statistics.
+
+### What it refuses to do
+
+- **No Sharpe ratio on a yield.** A rate is not held, so it has no return.
+- **No GARCH without ARCH effects.** Engle's LM test runs first. On i.i.d. data an
+  unguarded fit reports persistence 1.0000 and a 442,909-day half-life — finite,
+  precise-looking, meaningless.
+- **No self-regression.** A factor correlated >0.999 with the instrument is
+  dropped rather than reported as beta 1.0 with a t-statistic of 1e21.
+- **No number without its qualifier.** Every Sharpe carries its standard error;
+  every signal its deflated p-value.
 
 ---
 
