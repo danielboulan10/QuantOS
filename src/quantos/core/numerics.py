@@ -224,10 +224,11 @@ class CubicSpline:
         h = self.x[idx + 1] - self.x[idx]
         a = (self.x[idx + 1] - xi) / h
         b = (xi - self.x[idx]) / h
-        return (
+        return np.asarray(
             a * self.y[idx]
             + b * self.y[idx + 1]
-            + ((a**3 - a) * self._m[idx] + (b**3 - b) * self._m[idx + 1]) * (h * h) / 6.0
+            + ((a**3 - a) * self._m[idx] + (b**3 - b) * self._m[idx + 1]) * (h * h) / 6.0,
+            dtype=np.float64,
         )
 
     def derivative(self, xi: ArrayLike) -> NDArray[np.float64]:
@@ -237,9 +238,11 @@ class CubicSpline:
         h = self.x[idx + 1] - self.x[idx]
         a = (self.x[idx + 1] - xi) / h
         b = (xi - self.x[idx]) / h
-        return (self.y[idx + 1] - self.y[idx]) / h + (
-            (1.0 - 3.0 * a**2) * self._m[idx] + (3.0 * b**2 - 1.0) * self._m[idx + 1]
-        ) * h / 6.0
+        return np.asarray(
+            (self.y[idx + 1] - self.y[idx]) / h
+            + ((1.0 - 3.0 * a**2) * self._m[idx] + (3.0 * b**2 - 1.0) * self._m[idx + 1]) * h / 6.0,
+            dtype=np.float64,
+        )
 
 
 @dataclass

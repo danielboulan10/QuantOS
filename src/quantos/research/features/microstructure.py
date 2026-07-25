@@ -381,7 +381,7 @@ def effective_spread(
     d = np.sign(np.asarray(trade_signs, dtype=float).ravel())
     if not (p.size == m.size == d.size):
         raise ValueError("all inputs must be the same length")
-    return 2.0 * d * (p - m)
+    return np.asarray(2.0 * d * (p - m), dtype=np.float64)
 
 
 def realised_spread(
@@ -414,7 +414,7 @@ def realised_spread(
     d = np.sign(np.asarray(trade_signs, dtype=float).ravel())
     if not (p.size == m.size == d.size):
         raise ValueError("all inputs must be the same length")
-    return 2.0 * d * (p - m)
+    return np.asarray(2.0 * d * (p - m), dtype=np.float64)
 
 
 @dataclass(frozen=True)

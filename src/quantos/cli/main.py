@@ -17,10 +17,14 @@ import contextlib
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from quantos import __version__
+
+if TYPE_CHECKING:
+    from quantos.sim.world import SimulationResult
 
 _BOLD = "\033[1m"
 _DIM = "\033[2m"
@@ -232,13 +236,13 @@ def cmd_simulate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _write_simulation_charts(result: object, directory: Path) -> None:
+def _write_simulation_charts(result: SimulationResult, directory: Path) -> None:
     """Emit SVG charts for a simulation result."""
     from quantos.viz.svg import histogram, line_chart
 
     directory.mkdir(parents=True, exist_ok=True)
     mid = result.mid_series()
-    steps = np.arange(mid.size)
+    steps = np.arange(mid.size, dtype=np.float64)
     series = {"mid price": (steps, mid)}
     if result.fundamental_path is not None:
         stamps, values = result.fundamental_path

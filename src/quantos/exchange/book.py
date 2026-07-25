@@ -59,6 +59,7 @@ from quantos.core.types import (
     AgentId,
     BookLevel,
     Nanos,
+    Order,
     OrderId,
     Quantity,
     Side,
@@ -298,7 +299,7 @@ class LimitOrderBook:
         return list(self._order_index.values())
 
     # -- mutation ---------------------------------------------------------- #
-    def add(self, order) -> OrderId:  # noqa: ANN001 - quantos.core.types.Order
+    def add(self, order: Order) -> OrderId:
         """Rest an order on the book. Does **not** match.
 
         The caller is responsible for having already crossed the order against
@@ -349,7 +350,7 @@ class LimitOrderBook:
 
         level.push_back(node)
         self._order_index[int(order.order_id)] = node
-        return order.order_id
+        return OrderId(int(order.order_id))
 
     def cancel(self, order_id: OrderId) -> Quantity:
         """Remove a resting order. Returns the quantity that was cancelled.

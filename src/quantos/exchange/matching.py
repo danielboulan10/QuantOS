@@ -51,7 +51,7 @@ from quantos.core.types import (
     Trade,
 )
 from quantos.exchange.book import LimitOrderBook, OrderNotFound
-from quantos.exchange.fees import FeeSchedule
+from quantos.exchange.fees import FeeModel, MakerTakerFees
 
 __all__ = ["ExecutionReport", "MatchingEngine", "RejectReason", "SelfTradePolicy"]
 
@@ -125,7 +125,11 @@ class MatchingEngine:
     """
 
     book: LimitOrderBook = field(default_factory=LimitOrderBook)
-    fees: FeeSchedule = field(default_factory=FeeSchedule)
+    # Typed as the INTERFACE, not the default implementation. Declaring the
+    # concrete MakerTakerFees here made passing FlatFees or NoFees a type
+    # error, which silently falsified the extensibility claim in ERS-001:
+    # 'to add a fee schedule, implement FeeModel'. mypy caught it.
+    fees: FeeModel = field(default_factory=MakerTakerFees)
     self_trade_policy: SelfTradePolicy = SelfTradePolicy.CANCEL_RESTING
     trades: list[Trade] = field(default_factory=list)
     #: Maker-side fills are published separately: the taker receives its fills

@@ -174,7 +174,10 @@ ignore = [
 convention = "numpy"
 
 [tool.mypy]
-python_version = "3.10"
+# NOT pinned to 3.10: NumPy's bundled stubs use `type` statements, which are
+# 3.12 syntax, so a 3.10 target makes mypy fail inside numpy/__init__.pyi before
+# it reaches any of our code. The runtime floor stays at 3.10 (see
+# requires-python); this only governs how the type checker parses stubs.
 files = ["src/quantos"]
 strict = true
 warn_unreachable = true
@@ -186,3 +189,10 @@ plugins = []
 [[tool.mypy.overrides]]
 module = ["tests.*", "benchmarks.*", "scripts.*"]
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+# SciPy is imported in exactly one place -- `quantos doctor`, to report its
+# version -- and ships no type stubs. It is a test-only dependency (DDR-002), so
+# adding scipy-stubs to the runtime would defeat the point of the audit.
+module = ["scipy.*"]
+ignore_missing_imports = true

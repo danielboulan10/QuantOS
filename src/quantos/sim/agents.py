@@ -403,7 +403,7 @@ class InformedTrader(Agent):
         simulated market efficient in the sense of tracking its own latent value.
         """
         raw = self.aggression * (value - mid)
-        return int(np.clip(raw, -self.max_position, self.max_position))
+        return int(min(max(raw, -float(self.max_position)), float(self.max_position)))
 
     def on_wakeup(self, book: TopOfBook, timestamp: Nanos) -> list[Action]:
         if book.bid_price is None or book.ask_price is None:
@@ -675,7 +675,10 @@ class MomentumTrader(Agent):
         mid = book.mid
         if mid is None:
             return []
-        if self._fast is None:
+        # Both are set together or neither is; test both so the invariant is
+        # checked rather than assumed. mypy flagged the single-variable test as
+        # `float - None`, which would indeed crash if the two ever diverged.
+        if self._fast is None or self._slow is None:
             self._fast = self._slow = mid
         else:
             self._fast += self.fast_alpha * (mid - self._fast)
@@ -841,7 +844,7 @@ class InstitutionalTrader(Agent):
         f = min(max(elapsed_fraction, 0.0), 1.0)
         if self.style is ExecutionStyle.FRONT_LOADED:
             k = self.urgency
-            remaining_fraction = np.sinh(k * (1.0 - f)) / np.sinh(k)
+            remaining_fraction = float(np.sinh(k * (1.0 - f)) / np.sinh(k))
             return round(self.parent_quantity * (1.0 - remaining_fraction))
         return round(self.parent_quantity * f)
 

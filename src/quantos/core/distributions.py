@@ -130,7 +130,9 @@ class Normal(Distribution):
 
     def logpdf(self, x: ArrayLike) -> NDArray[np.float64]:
         z = (np.asarray(x, dtype=float) - self.mu) / self.sigma
-        return -0.5 * z * z - np.log(self.sigma) - 0.5 * np.log(2.0 * np.pi)
+        return np.asarray(
+            -0.5 * z * z - np.log(self.sigma) - 0.5 * np.log(2.0 * np.pi), dtype=np.float64
+        )
 
     def cdf(self, x: ArrayLike) -> NDArray[np.float64]:
         return sf.ndtr((np.asarray(x, dtype=float) - self.mu) / self.sigma)
@@ -185,7 +187,9 @@ class StudentT(Distribution):
             - sf.lgamma(np.array(0.5 * v))
             - 0.5 * np.log(v * np.pi)
         )
-        return const - 0.5 * (v + 1.0) * np.log1p(z * z / v) - np.log(self.scale)
+        return np.asarray(
+            const - 0.5 * (v + 1.0) * np.log1p(z * z / v) - np.log(self.scale), dtype=np.float64
+        )
 
     def cdf(self, x: ArrayLike) -> NDArray[np.float64]:
         r"""CDF via the incomplete beta identity.
@@ -427,7 +431,9 @@ class Laplace(Distribution):
 
     def logpdf(self, x: ArrayLike) -> NDArray[np.float64]:
         x = np.asarray(x, dtype=float)
-        return -np.abs(x - self.loc) / self.scale - np.log(2.0 * self.scale)
+        return np.asarray(
+            -np.abs(x - self.loc) / self.scale - np.log(2.0 * self.scale), dtype=np.float64
+        )
 
     def cdf(self, x: ArrayLike) -> NDArray[np.float64]:
         z = (np.asarray(x, dtype=float) - self.loc) / self.scale
@@ -557,12 +563,13 @@ class SkewNormal(Distribution):
 
     def logpdf(self, x: ArrayLike) -> NDArray[np.float64]:
         z = (np.asarray(x, dtype=float) - self.loc) / self.scale
-        return (
+        return np.asarray(
             np.log(2.0)
             - np.log(self.scale)
             - 0.5 * np.log(2.0 * np.pi)
             - 0.5 * z * z
-            + sf.log_ndtr(self.alpha * z)
+            + sf.log_ndtr(self.alpha * z),
+            dtype=np.float64,
         )
 
     def cdf(self, x: ArrayLike) -> NDArray[np.float64]:
@@ -572,9 +579,12 @@ class SkewNormal(Distribution):
         x = np.asarray(x, dtype=float)
         flat = np.atleast_1d(x).ravel()
         out = np.array(
-            [adaptive_quad(self.pdf, -40.0 * self.scale + self.loc, float(v)) for v in flat]
+            [
+                adaptive_quad(lambda t: float(self.pdf(t)), -40.0 * self.scale + self.loc, float(v))
+                for v in flat
+            ]
         )
-        return np.clip(out, 0.0, 1.0).reshape(np.shape(x))
+        return np.asarray(np.clip(out, 0.0, 1.0).reshape(np.shape(x)), dtype=np.float64)
 
     def ppf(self, p: ArrayLike) -> NDArray[np.float64]:
         from quantos.core.optimize.roots import bisect_vectorised
@@ -595,7 +605,7 @@ class SkewNormal(Distribution):
         u = rng.standard_normal(size)
         v = rng.standard_normal(size)
         z = delta * np.abs(u) + np.sqrt(1.0 - delta**2) * v
-        return self.loc + self.scale * z
+        return np.asarray(self.loc + self.scale * z, dtype=np.float64)
 
     @property
     def mean(self) -> float:
@@ -686,7 +696,7 @@ class Binomial(Distribution):
         support = np.arange(self.n + 1, dtype=float)
         cdf = self.cdf(support)
         idx = np.searchsorted(cdf, np.clip(p, 0.0, 1.0), side="left")
-        return support[np.clip(idx, 0, self.n)]
+        return np.asarray(support[np.clip(idx, 0, self.n)], dtype=np.float64)
 
     def sample(self, size: int | tuple[int, ...], rng: np.random.Generator) -> NDArray[np.float64]:
         return rng.binomial(self.n, self.p, size=size).astype(float)
@@ -731,7 +741,7 @@ class Poisson(Distribution):
         support = np.arange(upper + 1, dtype=float)
         cdf = self.cdf(support)
         idx = np.searchsorted(cdf, np.clip(p, 0.0, 1.0), side="left")
-        return support[np.clip(idx, 0, upper)]
+        return np.asarray(support[np.clip(idx, 0, upper)], dtype=np.float64)
 
     def sample(self, size: int | tuple[int, ...], rng: np.random.Generator) -> NDArray[np.float64]:
         return rng.poisson(self.lam, size=size).astype(float)

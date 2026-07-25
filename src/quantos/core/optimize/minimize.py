@@ -357,14 +357,14 @@ def project_to_simplex(v: ArrayLike, total: float = 1.0) -> NDArray[np.float64]:
     condition = u - (cumulative - total) / indices > 0
     rho = int(indices[condition][-1])
     theta = (cumulative[rho - 1] - total) / rho
-    return np.maximum(v - theta, 0.0)
+    return np.asarray(np.maximum(v - theta, 0.0), dtype=np.float64)
 
 
 def project_to_box(
     v: ArrayLike, lower: ArrayLike | float = 0.0, upper: ArrayLike | float = 1.0
 ) -> NDArray[np.float64]:
     """Projection onto a box, i.e. elementwise clipping."""
-    return np.clip(np.asarray(v, dtype=float), lower, upper)
+    return np.asarray(np.clip(np.asarray(v, dtype=float), lower, upper), dtype=np.float64)
 
 
 def projected_gradient(

@@ -245,7 +245,7 @@ def minimum_variance(
         )
         weights = project_to_simplex(result.x)
 
-    volatility = float(np.sqrt(max(weights @ cov @ weights, 0.0)))
+    volatility = float(np.sqrt(float(max(float(weights @ cov @ weights), 0.0))))
     expected = (
         float(weights @ np.asarray(returns, dtype=float).mean(axis=0))
         if returns is not None
@@ -323,7 +323,7 @@ def mean_variance(
     return PortfolioSolution(
         weights=weights,
         expected_return=float(mu @ weights),
-        volatility=float(np.sqrt(max(weights @ cov @ weights, 0.0))),
+        volatility=float(np.sqrt(float(max(float(weights @ cov @ weights), 0.0)))),
         objective="mean_variance",
         covariance_condition=condition_number(cov),
         shrinkage=delta,
@@ -361,7 +361,7 @@ def maximum_sharpe(
     else:
 
         def negative_sharpe(w: NDArray[np.float64]) -> float:
-            vol = float(np.sqrt(max(w @ cov @ w, 1e-300)))
+            vol = float(np.sqrt(float(max(float(w @ cov @ w), 1e-300))))
             return float(-(excess @ w) / vol)
 
         result = projected_gradient(
@@ -372,7 +372,7 @@ def maximum_sharpe(
     return PortfolioSolution(
         weights=weights,
         expected_return=float(mu @ weights),
-        volatility=float(np.sqrt(max(weights @ cov @ weights, 0.0))),
+        volatility=float(np.sqrt(float(max(float(weights @ cov @ weights), 0.0)))),
         objective="maximum_sharpe",
         covariance_condition=condition_number(cov),
         shrinkage=delta,
@@ -390,10 +390,10 @@ def risk_contributions(weights: ArrayLike, covariance: ArrayLike) -> NDArray[np.
     """
     w = np.asarray(weights, dtype=float).ravel()
     cov = np.asarray(covariance, dtype=float)
-    volatility = float(np.sqrt(max(w @ cov @ w, 0.0)))
+    volatility = float(np.sqrt(float(max(float(w @ cov @ w), 0.0))))
     if volatility == 0:
         return np.zeros_like(w)
-    return w * (cov @ w) / volatility
+    return np.asarray(w * (cov @ w) / volatility, dtype=np.float64)
 
 
 def risk_parity(
@@ -461,7 +461,7 @@ def risk_parity(
         expected_return=(
             float(w @ np.asarray(returns, dtype=float).mean(axis=0)) if returns is not None else 0.0
         ),
-        volatility=float(np.sqrt(max(w @ cov @ w, 0.0))),
+        volatility=float(np.sqrt(float(max(float(w @ cov @ w), 0.0)))),
         objective="risk_parity",
         covariance_condition=condition_number(cov),
         shrinkage=delta,
@@ -529,7 +529,7 @@ def hierarchical_risk_parity(
             if returns is not None
             else 0.0
         ),
-        volatility=float(np.sqrt(max(weights @ cov @ weights, 0.0))),
+        volatility=float(np.sqrt(float(max(float(weights @ cov @ weights), 0.0)))),
         objective="hierarchical_risk_parity",
         covariance_condition=condition_number(cov),
         shrinkage=delta,
@@ -660,5 +660,5 @@ def diversification_ratio(weights: ArrayLike, covariance: ArrayLike) -> float:
     w = np.asarray(weights, dtype=float).ravel()
     cov = np.asarray(covariance, dtype=float)
     individual = float(np.sum(np.abs(w) * np.sqrt(np.diag(cov))))
-    portfolio = float(np.sqrt(max(w @ cov @ w, 0.0)))
+    portfolio = float(np.sqrt(float(max(float(w @ cov @ w), 0.0))))
     return float(individual / portfolio) if portfolio > 0 else float("nan")

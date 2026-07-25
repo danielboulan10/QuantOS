@@ -18,6 +18,7 @@ publication figures; this module is what runs by default.
 from __future__ import annotations
 
 import html
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -344,7 +345,7 @@ def _format_tick(value: float) -> str:
 # Convenience constructors                                                    #
 # --------------------------------------------------------------------------- #
 def line_chart(
-    series: dict[str, tuple[ArrayLike, ArrayLike]],
+    series: Mapping[str, tuple[ArrayLike, ArrayLike]],
     *,
     title: str = "",
     x_label: str = "",
@@ -381,7 +382,7 @@ def histogram(
     title: str = "",
     x_label: str = "",
     density: bool = False,
-    overlay: dict[str, tuple[ArrayLike, ArrayLike]] | None = None,
+    overlay: Mapping[str, tuple[ArrayLike, ArrayLike]] | None = None,
     theme: Theme | None = None,
 ) -> Figure:
     """Histogram, optionally with analytic density curves overlaid.
@@ -394,7 +395,13 @@ def histogram(
     values = values[np.isfinite(values)]
     if values.size == 0:
         raise ValueError("no finite data to plot")
-    heights, edges = np.histogram(values, bins=bins, density=density)
+    # np.histogram's stubs overload on `density` being a literal, so the call
+    # is split rather than passing a bool variable through.
+    if density:
+        heights, edges = np.histogram(values, bins=bins, density=True)
+    else:
+        counts, edges = np.histogram(values, bins=bins)
+        heights = counts.astype(np.float64)
 
     figure = Figure(
         title=title,

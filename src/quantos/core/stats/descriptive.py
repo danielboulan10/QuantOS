@@ -255,7 +255,7 @@ def autocorrelation(x: ArrayLike, max_lag: int, *, demean: bool = True) -> NDArr
     acov = np.fft.irfft(spectrum * np.conjugate(spectrum), size)[: max_lag + 1] / n
     if acov[0] == 0.0:
         return np.zeros(max_lag + 1)
-    return acov / acov[0]
+    return np.asarray(acov / acov[0], dtype=np.float64)
 
 
 def quantile(x: ArrayLike, q: ArrayLike, *, method: str = "linear") -> NDArray[np.float64]:
@@ -264,7 +264,10 @@ def quantile(x: ArrayLike, q: ArrayLike, *, method: str = "linear") -> NDArray[n
     A thin wrapper over NumPy, present so that callers depend on the QuantOS
     surface rather than on NumPy's default interpolation method changing.
     """
-    return np.quantile(np.asarray(x, dtype=float), q, method=method)
+    return np.asarray(
+        np.quantile(np.asarray(x, dtype=float), np.asarray(q, dtype=float), method=method),  # type: ignore[call-overload]
+        dtype=np.float64,
+    )
 
 
 def winsorise(x: ArrayLike, lower: float = 0.01, upper: float = 0.99) -> NDArray[np.float64]:
@@ -278,7 +281,7 @@ def winsorise(x: ArrayLike, lower: float = 0.01, upper: float = 0.99) -> NDArray
     if not 0.0 <= lower < upper <= 1.0:
         raise ValueError("require 0 <= lower < upper <= 1")
     lo, hi = np.quantile(x, [lower, upper])
-    return np.clip(x, lo, hi)
+    return np.asarray(np.clip(x, lo, hi), dtype=np.float64)
 
 
 def rolling_apply(
