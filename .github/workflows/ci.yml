@@ -112,10 +112,16 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12", cache: pip }
       - run: pip install -e ".[test]"
-      - run: |
-          quantos simulate --seconds 3 --seed 12345 > run1.txt
-          quantos simulate --seconds 3 --seed 12345 > run2.txt
+      - name: same seed produces identical output
+        run: |
+          # Strip the wall-clock line before diffing. It is genuine output but it
+          # is not part of the reproducibility claim -- the claim is that the
+          # *simulation* is bit-exact, not that two runs take equally long. An
+          # earlier version diffed it and failed intermittently on a busy runner.
+          quantos simulate --seconds 3 --seed 12345 | grep -v 'wall time' > run1.txt
+          quantos simulate --seconds 3 --seed 12345 | grep -v 'wall time' > run2.txt
           diff run1.txt run2.txt && echo "bit-exact across runs"
+          test -s run1.txt
 
   benchmarks:
     name: benchmarks
