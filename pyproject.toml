@@ -59,9 +59,9 @@ dev = [
 quantos = "quantos.cli.main:main"
 
 [project.urls]
-Homepage = "https://github.com/quantos-project/quantos"
-Documentation = "https://github.com/quantos-project/quantos/tree/main/docs"
-Source = "https://github.com/quantos-project/quantos"
+Homepage = "https://github.com/danielboulan/quantos"
+Documentation = "https://github.com/danielboulan/quantos/tree/main/docs"
+Source = "https://github.com/danielboulan/quantos"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quantos"]
