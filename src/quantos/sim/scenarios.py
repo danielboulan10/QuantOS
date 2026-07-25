@@ -95,31 +95,45 @@ def build_liquid_market(
            market shows. Balance is what leaves returns unpredictable while
            still letting volatility cluster.
 
-    Measured behaviour (30 s of market time, seed 42)
-        Correlation between the mid and the latent fundamental is **0.78**, with
-        an RMSE of ~11 ticks, on a fundamental that moved 56 ticks. The market
-        therefore discovers a value no agent broadcast. Mean spread ~2.7 ticks;
-        the book holds ~200 resting orders. Market makers earn 1,500-2,000 each;
-        noise traders pay for it.
+    Measured behaviour, over 16 seeds (scripts/measure_price_discovery.py)
+        Quoting a single run would be exactly the selective reporting this
+        repository exists to guard against, so these are distributions.
 
-        :func:`~quantos.sim.stylized_facts.analyse_stylized_facts` reproduces
-        **5 of 7** facts: fat tails, uncorrelated returns, volatility clustering,
-        long-memory volatility and aggregational Gaussianity. The two it does not
-        reproduce, and why:
+        ==========================  ================  ================
+        Metric                      with MM learning  learning ablated
+        ==========================  ================  ================
+        corr(mid, latent value)     0.29 (sd 0.48)    0.09 (sd 0.33)
+        median correlation          0.46              0.14
+        runs with corr > 0.5        40%               7%
+        mean quoted spread          4.69 ticks        2.79 ticks
+        stylised facts reproduced   4.3 / 7           5.0 / 7
+        ==========================  ================  ================
 
-        * **Power-law tail index.** The Hill estimate is ~18 against an empirical
-          ~3. Excess kurtosis is positive but the tail decays faster than a power
-          law, because the news process uses Gaussian jump sizes. A
-          heavier-tailed jump distribution would fix the number, but it would be
-          imposing the fact rather than producing it.
-        * **Leverage effect.** Measured at -0.001, not significantly negative.
-          This population is sign-symmetric: nothing makes market makers widen
-          more after a selloff than after a rally. Reproducing it needs an
-          asymmetric volatility response, which no agent here has.
+        **Price discovery is weak and highly dispersed.** The market tracks its
+        latent fundamental better than chance, and Glosten-Milgrom order-flow
+        learning by the makers triples the mean correlation -- a real effect --
+        but individual runs range from -0.69 to +0.88. This model does *not*
+        reliably discover its own fundamental. An earlier version of this
+        docstring claimed 0.78, which was simply the best of three seeds.
 
-        Both are reported rather than tuned away. A simulator claiming 7 of 7
-        should be treated with more suspicion than one that says which two it
-        misses and what mechanism is absent.
+        Why, mechanically: informed traders' *net* flow is bounded by their
+        position limit (a few thousand lots), while sign-balanced noise flow
+        accumulates a random walk of comparable magnitude over the same horizon.
+        Signal and noise are the same order, so convergence is not forced. A
+        continuous double auction populated by heuristic agents has no
+        equilibrium mechanism compelling price to value; obtaining one needs a
+        Kyle-style batch auction with a maker solving an explicit filtering
+        problem, which is a different model rather than a tuning change.
+
+        Note the trade-off the ablation exposes: makers that learn quote *wider*
+        (4.69 vs 2.79 ticks) because their fair-value estimates disperse. Better
+        discovery is bought with worse liquidity, and the stylised-fact score
+        falls correspondingly. Neither column dominates.
+
+        What the simulation does do reliably, on every seed: correct maker/taker
+        economics (makers earn, noise traders pay), an uncrossed book with a
+        stable spread, emergent volatility clustering (mean ACF of |r| = 0.28),
+        long memory (Hurst 0.90), and excess kurtosis of 6.8.
 
     Example
         >>> sim = build_liquid_market(duration_ns=2_000_000_000, seed=3)

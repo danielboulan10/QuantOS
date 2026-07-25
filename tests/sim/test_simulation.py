@@ -194,19 +194,63 @@ def test_market_makers_earn_and_noise_traders_pay(liquid_result) -> None:
 
 
 @pytest.mark.slow
-def test_price_discovers_the_latent_fundamental(liquid_result) -> None:
-    """The central claim: the market finds a value no agent broadcasts."""
+def test_price_moves_and_does_not_sit_pinned(liquid_result) -> None:
+    """A necessary condition for discovery: the price must actually move.
+
+    Much weaker than "the market is efficient", and unlike that claim it holds on
+    every seed. An earlier version of the simulation pinned the mid to a 7-tick
+    band while the fundamental wandered 49 ticks; this is the regression test.
+    """
     mid = liquid_result.mid_series()
-    stamps, values = liquid_result.fundamental_path
-    grid = np.arange(mid.size) * liquid_result.config.snapshot_interval_ns
+    _, values = liquid_result.fundamental_path
+    assert np.nanmax(mid) - np.nanmin(mid) > 10.0
+    assert float(values.max() - values.min()) > 10.0
+
+
+def _discovery_correlation(seed: int, seconds: float, learning_rate: float | None) -> float:
+    """Correlation between the market mid and the latent fundamental, one run."""
+    from quantos.sim.agents import MarketMaker
+
+    simulation = build_liquid_market(duration_ns=int(seconds * 1e9), seed=seed)
+    if learning_rate is not None:
+        for agent in simulation.agents.values():
+            if isinstance(agent, MarketMaker):
+                agent.learning_rate = learning_rate
+    result = simulation.run()
+
+    mid = result.mid_series()
+    stamps, values = result.fundamental_path
+    grid = np.arange(mid.size) * result.config.snapshot_interval_ns
     latent = np.interp(grid, stamps, values)
     finite = np.isfinite(mid)
+    if int(np.sum(finite)) < 200:
+        return float("nan")
+    return price_discovery_efficiency(mid[finite], latent[finite]).correlation
 
-    discovery = price_discovery_efficiency(mid[finite], latent[finite])
-    assert discovery.correlation > 0.5
-    assert 0.3 < discovery.beta < 2.0
-    # The price must actually move, not sit pinned at its starting value.
-    assert np.nanmax(mid) - np.nanmin(mid) > 10.0
+
+@pytest.mark.slow
+@pytest.mark.statistical
+def test_order_flow_learning_improves_price_discovery() -> None:
+    """Glosten-Milgrom learning beats no learning, averaged over seeds.
+
+    This is the honest form of the claim. Discovery correlation on any single
+    seed ranges from -0.69 to +0.88 (see scripts/measure_price_discovery.py), so
+    asserting `correlation > 0.5` on one favourable run -- which this test used
+    to do -- tests the seed rather than the mechanism.
+
+    What survives averaging is the *ablation*: makers that infer fair value from
+    aggressor-signed order flow track the latent fundamental measurably better
+    than makers anchored only on the book's own microprice. Over 16 seeds the
+    means are 0.29 against 0.09.
+    """
+    seeds = range(1, 7)
+    with_learning = [
+        c for c in (_discovery_correlation(s, 12.0, None) for s in seeds) if np.isfinite(c)
+    ]
+    without = [c for c in (_discovery_correlation(s, 12.0, 0.0) for s in seeds) if np.isfinite(c)]
+
+    assert len(with_learning) >= 4 and len(without) >= 4
+    assert float(np.mean(with_learning)) > float(np.mean(without))
 
 
 @pytest.mark.slow
@@ -214,14 +258,20 @@ def test_stylised_facts_that_are_genuinely_emergent(liquid_result) -> None:
     """Volatility clustering and long memory are NOT in the latent process.
 
     The fundamental has i.i.d. increments (asserted separately), so if the tape
-    shows clustering it came from agent interaction. Fat tails are partly
-    inherited from the news jumps, so they are not claimed here.
+    shows clustering it came from agent interaction. Fat tails are only partly
+    emergent -- the news process contributes some -- so they are not claimed here.
+
+    `uncorrelated_returns` is deliberately NOT asserted. Enabling Glosten-Milgrom
+    learning disperses the makers' fair values, which widens the spread and
+    introduces negative first-order return autocorrelation (lag-1 ACF about
+    -0.17) from bid-ask bounce. That is a real cost of the mechanism that buys
+    better price discovery, quantified in build_liquid_market's docstring, and
+    the honest response is to record the trade-off rather than assert past it.
     """
     report = analyse_stylized_facts(liquid_result.returns())
     assert report["volatility_clustering"].passed
     assert report["long_memory_volatility"].passed
-    assert report["uncorrelated_returns"].passed
-    assert report.score >= 0.5
+    assert report.score >= 0.4
 
 
 def test_stylised_facts_battery_discriminates() -> None:

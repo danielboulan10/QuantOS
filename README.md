@@ -30,24 +30,48 @@ dependency-free SVG.*
 
 Five things that most quant repositories do not do, each linked to the code:
 
-**1. The market simulation discovers a price nobody tells it.**
+**1. The market simulation is measured across seeds, and reports a negative result.**
 [`quantos/sim`](src/quantos/sim) runs noise traders, informed traders,
 Avellaneda-Stoikov market makers, momentum and mean-reversion traders against a
 real matching engine with per-agent latency. A latent fundamental value
 ([`fundamental.py`](src/quantos/sim/fundamental.py)) is visible to informed
-traders and to nobody else. Over 30 seconds of market time the mid-price tracks
-that latent value with **correlation 0.78** and an RMSE of ~11 ticks, on a
-fundamental that moved 56 ticks.
+traders and to nobody else.
 
-**2. Stylised facts are measured, not asserted — and two of seven fail.**
+Does the market discover it? Over 16 seeds
+([`scripts/measure_price_discovery.py`](scripts/measure_price_discovery.py)) the
+correlation between the mid and that latent value averages **0.29 with a standard
+deviation of 0.48**, ranging from −0.69 to +0.88. So: better than chance, but
+**this model does not reliably discover its own fundamental**, and any single run
+is nearly uninformative. An earlier draft of this README quoted 0.78 — which was
+the best of the three seeds that had been run at the time. Catching that is the
+single most useful thing the measurement script did.
+
+What *does* survive averaging is an ablation. Giving the market makers
+Glosten-Milgrom inference — revise fair value up when repeatedly lifted on the
+ask — triples the mean correlation, 0.09 → 0.29, and lifts the share of runs
+above 0.5 from 7% to 40%. It also costs something: fair-value dispersion widens
+the mean spread from 2.79 to 4.69 ticks and introduces −0.17 lag-1 return
+autocorrelation. Both columns are tabulated in
+[`scenarios.py`](src/quantos/sim/scenarios.py); neither dominates.
+
+Why discovery is weak is a modelling fact worth stating: informed traders' *net*
+flow is bounded by their position limits, while sign-balanced noise flow
+accumulates a random walk of comparable size over the same horizon. A continuous
+double auction of heuristic agents has no equilibrium mechanism forcing price to
+value. Getting one requires a Kyle-style batch auction with a maker solving an
+explicit filtering problem — a different model, not a tuning change.
+
+**2. Stylised facts are measured, not asserted — and several fail.**
 [`stylized_facts.py`](src/quantos/sim/stylized_facts.py) tests the simulated tape
-against Cont's list. It reproduces fat tails, uncorrelated returns, volatility
-clustering, long-memory volatility and aggregational Gaussianity. It does **not**
-reproduce the empirical power-law tail index (~18 against ~3) or the leverage
-effect. Both failures are explained in
-[`scenarios.py`](src/quantos/sim/scenarios.py) with the missing mechanism named.
+against Cont's list. Reliably reproduced on every seed: excess kurtosis (6.8),
+volatility clustering (mean ACF of |r| = 0.28) and long-memory volatility (Hurst
+0.90) — none of which is present in the latent process, whose increments are
+i.i.d. by construction and asserted to be so. Not reproduced: the empirical
+power-law tail index (~18 against ~3), the leverage effect, and — once maker
+learning is enabled — uncorrelated returns. Each failure is named in
+[`scenarios.py`](src/quantos/sim/scenarios.py) along with the missing mechanism.
 A simulator claiming seven of seven deserves more suspicion than one that says
-which two it misses.
+which it misses and why.
 
 **3. Microstructure estimators are validated against known answers.**
 Because the simulator knows the true aggressor side of every trade and the true
@@ -242,6 +266,10 @@ Empirical size is now 2.7%.
 - **The simulation is calibrated, and says so.** Realistic behaviour occupies a
   narrow region of a large parameter space. `scenarios.py` records what each
   configuration was tuned for and what went wrong before it was.
+- **Price discovery is weak.** Mean correlation with the latent fundamental is
+  0.29 with a standard deviation of 0.48 across seeds. The market is not
+  efficient in any strong sense, and the README says so rather than quoting the
+  best run. See point 1 above for the mechanism.
 - **PBO is noisy.** Measured across 12 independent skill-less datasets it centres
   correctly on 0.449 but individual values range from 0.10 to 0.70. A single PBO
   number should not be quoted as a verdict; the docstring says so.

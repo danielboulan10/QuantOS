@@ -458,11 +458,39 @@ class MarketMaker(Agent):
         survives, and its magnitude is the price the maker charges for bearing
         inventory risk.
 
-    Anchoring
-        Quotes are centred on the **microprice** rather than the mid (see
-        :attr:`quantos.core.types.TopOfBook.microprice`). Queue imbalance
-        predicts the next mid move, so anchoring on the mid systematically
-        quotes on the wrong side of fair value when the book is lopsided.
+    Anchoring, and why the microprice alone is not enough
+        Quoting around the **microprice** (see
+        :attr:`quantos.core.types.TopOfBook.microprice`) beats quoting around the
+        mid, because queue imbalance predicts the next mid move. But the
+        microprice is derived from the book, and the book is made of the makers'
+        own quotes -- so a population of makers anchored only on it forms a
+        closed feedback loop with **no external reference**. Nothing pulls the
+        price toward the latent fundamental value, and price discovery fails.
+
+        Measured, before this was fixed: across 20 seeds the correlation between
+        the market mid and the latent fundamental averaged near **zero**, with
+        individual runs as low as -0.45. A single lucky seed gave 0.78, which is
+        exactly the kind of number one should not quote.
+
+    Learning from order flow (Glosten-Milgrom)
+        The missing mechanism is *inference*. A maker repeatedly lifted on its
+        ask should conclude that informed traders are buying and revise its fair
+        value **up**. That is the whole content of Glosten-Milgrom (1985): the
+        quote is a Bayesian posterior, and each trade is evidence.
+
+        Implemented here as an exponential update on aggressor-signed fill flow:
+
+        .. math:: \hat{V} \leftarrow \hat{V}
+                  + \eta \cdot \text{sign(aggressor)} \cdot \sqrt{q}
+
+        with :math:`\eta` = ``learning_rate``. The square root rather than the
+        raw quantity is deliberate -- it matches the empirical square-root impact
+        law (see :mod:`quantos.execution.almgren_chriss`) and stops one large
+        print from dominating the estimate.
+
+        Setting ``learning_rate=0`` recovers the pure feedback-loop behaviour,
+        which is useful for demonstrating that this term is what makes the market
+        efficient rather than a cosmetic addition.
     """
 
     def __init__(
@@ -477,6 +505,8 @@ class MarketMaker(Agent):
         max_position: int = 300,
         horizon_ns: int = 1_000_000_000,
         min_half_spread_ticks: float = 1.0,
+        learning_rate: float = 0.15,
+        initial_fair_value: float | None = None,
         wakeup_ns: int = 2_000_000,
     ) -> None:
         super().__init__(agent_id, rng)
@@ -487,10 +517,52 @@ class MarketMaker(Agent):
         self.max_position = max_position
         self.horizon_ns = horizon_ns
         self.min_half_spread_ticks = min_half_spread_ticks
+        self.learning_rate = learning_rate
         self.wakeup_interval = Nanos(wakeup_ns)
         self._quotes: dict[int, Side] = {}
+        #: The maker's own estimate of fair value, updated from order flow.
+        #: ``None`` until the first quote, then seeded from the observed book.
+        self.fair_value: float | None = initial_fair_value
         #: Diagnostics for the research layer.
         self.reservation_prices: list[tuple[int, float]] = []
+
+    def learn_from_fill(self, fill: Fill) -> None:
+        r"""Revise fair value from one of this maker's own fills.
+
+        A maker's fill tells it the *aggressor's* direction: if the maker sold,
+        someone bought. ``fill.side`` is the maker's side, so the aggressor's
+        sign is its negation.
+        """
+        if self.learning_rate <= 0.0 or self.fair_value is None:
+            return
+        aggressor_sign = -fill.side.sign
+        self.fair_value += self.learning_rate * aggressor_sign * float(np.sqrt(int(fill.quantity)))
+
+    def anchor_price(self, book: TopOfBook) -> float | None:
+        r"""Blend the maker's learned fair value with the observed microprice.
+
+        The microprice carries immediate, high-frequency information about which
+        side of the book is about to be exhausted; the learned fair value carries
+        the slow, accumulated inference from order flow. Using only the former
+        loses the external anchor; using only the latter ignores the queue.
+        """
+        observed = book.microprice if book.microprice is not None else book.mid
+        if observed is None:
+            return None
+        if self.fair_value is None:
+            # Seed from the first book we see, so no external knowledge leaks in.
+            self.fair_value = observed
+        if self.learning_rate <= 0.0:
+            return observed
+        # Pull the estimate toward the observed book, but only very weakly. This
+        # term runs on every wakeup (every 2 ms) while learning happens per fill,
+        # so a coefficient large enough to feel reasonable in isolation erases the
+        # accumulated inference entirely: at 0.05 the measured mean correlation
+        # with the fundamental stayed at 0.09, indistinguishable from having no
+        # learning at all. It exists only to stop unbounded drift away from a
+        # market the maker must actually trade in.
+        self.fair_value += 0.002 * (observed - self.fair_value)
+        return 0.7 * self.fair_value + 0.3 * observed
 
     def reservation_price(self, anchor: float, time_remaining: float) -> float:
         r"""Inventory-adjusted fair value :math:`s - q\gamma\sigma^2(T-t)`."""
@@ -514,7 +586,7 @@ class MarketMaker(Agent):
         return float(max(inventory_term + markup, self.min_half_spread_ticks))
 
     def on_wakeup(self, book: TopOfBook, timestamp: Nanos) -> list[Action]:
-        anchor = book.microprice if book.microprice is not None else book.mid
+        anchor = self.anchor_price(book)
         if anchor is None:
             return []
 
@@ -553,6 +625,7 @@ class MarketMaker(Agent):
 
     def on_fill(self, fill: Fill, timestamp: Nanos) -> list[Action]:
         self._quotes.pop(int(fill.order_id), None)
+        self.learn_from_fill(fill)
         return []
 
     def register_quote(self, order_id: OrderId, side: Side) -> None:
