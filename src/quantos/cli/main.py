@@ -756,7 +756,8 @@ def cmd_research(args: argparse.Namespace) -> int:
 
     from quantos.data.catalog import Kind, resolve
     from quantos.data.fred import FredClient, FredError
-    from quantos.data.loader import align, load_ohlcv_csv
+    from quantos.data.loader import load_ohlcv_csv
+    from quantos.data.market import MarketDataError, fetch_prices
     from quantos.research.instruments import AssetClass, Instrument
     from quantos.research.render import render_markdown, render_text
     from quantos.research.report import generate_report
@@ -764,7 +765,38 @@ def cmd_research(args: argparse.Namespace) -> int:
     client = FredClient(offline=args.offline)
     instrument: Instrument
 
-    if args.csv:
+    if args.ticker:
+        try:
+            price, info = fetch_prices(
+                args.ticker,
+                start=args.start,
+                range_key=args.range,
+                offline=args.offline,
+                refresh=args.refresh,
+            )
+        except MarketDataError as error:
+            print(f"could not fetch {args.ticker}: {error}")
+            return 1
+        print(f"resolved {info.describe()}")
+        print(f"  {len(price)} daily bars, {price.start}..{price.end}, {price.price_column}")
+        if "warning" in price.detail:
+            print(f"  warning: {price.detail['warning']}")
+        print()
+        # The asset class comes from the venue rather than from a flag, so the
+        # report gates its own analyses correctly without being told.
+        instrument = Instrument(
+            symbol=info.ticker,
+            name=info.name,
+            asset_class=AssetClass(info.asset_class),
+            dates=price.dates,
+            prices=price.prices,
+            source=price.source,
+            dividend_adjusted=True,
+            average_daily_volume=(
+                float(np.nanmean(price.volume)) if price.volume is not None else None
+            ),
+        )
+    elif args.csv:
         try:
             price = load_ohlcv_csv(args.csv, symbol=args.symbol).since(args.start)
         except ValueError as error:
@@ -803,7 +835,10 @@ def cmd_research(args: argparse.Namespace) -> int:
             dividend_adjusted=True,
         )
     else:
-        print("supply --csv PATH or --series KEY. See `quantos analyse --list`.")
+        print(
+            "supply --ticker SYMBOL (e.g. --ticker AAPL), --csv PATH, or --series KEY.\n"
+            "See `quantos analyse --list` for the built-in macro series."
+        )
         return 2
 
     if len(instrument) < 60:
@@ -812,42 +847,18 @@ def cmd_research(args: argparse.Namespace) -> int:
 
     factors: dict[str, np.ndarray] = {}
     if not args.no_factors:
-        wanted = {"market": "SP500", "rates_10y": "DGS10", "credit_hy": "BAMLH0A0HYM2"}
-        raw = {}
-        for label, fred_id in wanted.items():
-            try:
-                raw[label] = client.get(fred_id).since(args.start)
-            except FredError:
-                continue
-        if raw:
-            payload = {"instrument": (instrument.dates, instrument.prices)}
-            payload.update({k: (v.dates, v.values) for k, v in raw.items()})
-            common, aligned = align(payload)
-            if common.size > 150:
-                if common.size < len(instrument) * 0.8:
-                    print(
-                        f"  note: factor alignment truncated the sample from "
-                        f"{len(instrument):,} to {common.size:,} observations, "
-                        f"because the shortest factor series starts later. Pass "
-                        f"--no-factors to analyse the full history."
-                    )
-                instrument = Instrument(
-                    symbol=instrument.symbol,
-                    name=instrument.name,
-                    asset_class=instrument.asset_class,
-                    dates=common,
-                    prices=aligned["instrument"],
-                    source=instrument.source,
-                    dividend_adjusted=instrument.dividend_adjusted,
-                    average_daily_volume=instrument.average_daily_volume,
-                )
-                for label in raw:
-                    values = aligned[label]
-                    factors[label] = (
-                        np.diff(np.log(np.maximum(values, 1e-300)))
-                        if label == "market"
-                        else np.diff(values)
-                    )
+        from quantos.data.factors import build_factors
+
+        factor_set = build_factors(
+            instrument.dates, instrument.prices, start=args.start, offline=args.offline
+        )
+        note = factor_set.note()
+        if note:
+            print(f"  note: {note}")
+        if factor_set.usable:
+            factors = factor_set.columns
+        if factor_set.unavailable:
+            print(f"  note: factors unavailable: {', '.join(factor_set.unavailable)}")
 
     report = generate_report(
         instrument,
@@ -907,14 +918,26 @@ def cmd_forward(args: argparse.Namespace) -> int:
             )
         return 0
 
-    if not args.csv:
-        print("pass --csv with a price file, or --score-only to read the ledger")
-        return 1
+    if args.ticker:
+        from quantos.data.market import MarketDataError, fetch_prices
 
-    try:
-        series = load_ohlcv_csv(args.csv, symbol=args.symbol).since(args.start)
-    except ValueError as error:
-        print(f"could not load {args.csv}: {error}")
+        try:
+            series, info = fetch_prices(args.ticker, start=args.start, offline=args.offline)
+        except MarketDataError as error:
+            print(f"could not fetch {args.ticker}: {error}")
+            return 1
+        print(f"resolved {info.describe()}")
+    elif args.csv:
+        try:
+            series = load_ohlcv_csv(args.csv, symbol=args.symbol).since(args.start)
+        except ValueError as error:
+            print(f"could not load {args.csv}: {error}")
+            return 1
+    else:
+        print(
+            "pass --ticker SYMBOL or --csv PATH to record predictions, "
+            "or --score-only to read the ledger back"
+        )
         return 1
 
     result = run_daily(ledger, series, horizon_days=args.horizon)
@@ -1043,6 +1066,13 @@ def cmd_intraday(args: argparse.Namespace) -> int:
         for step, correlation in zip(steps, correlations, strict=True):
             print(f"  every {step:5d} obs   correlation {correlation:+.4f}")
     return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Run the local research viewer: a search bar for the whole pipeline."""
+    from quantos.web.server import serve
+
+    return serve(host=args.host, port=args.port, open_browser=not args.no_browser)
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -1227,7 +1257,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--output", default=None, help="directory for SVG charts")
     p.set_defaults(func=cmd_analyse)
 
-    p = sub.add_parser("research", help="full research report on one instrument")
+    p = sub.add_parser("research", help="full research report on any ticker")
+    p.add_argument(
+        "--ticker",
+        default=None,
+        help="any listed symbol: AAPL, SPY, ^GSPC, VOD.L, BTC-USD. No API key needed.",
+    )
+    p.add_argument(
+        "--range",
+        default="10y",
+        choices=["1y", "2y", "5y", "10y", "max"],
+        help="how much history to request for --ticker",
+    )
+    p.add_argument("--refresh", action="store_true", help="ignore the cache and re-download")
     p.add_argument("--csv", default=None, help="CSV file for a stock, ETF or future")
     p.add_argument("--series", default=None, help="a catalogue key or FRED id")
     p.add_argument("--symbol", default=None, help="override the symbol name")
@@ -1248,8 +1290,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_research)
 
     p = sub.add_parser("forward", help="append-only forward testing: predict today, score later")
+    p.add_argument("--ticker", default=None, help="any listed symbol, e.g. --ticker AAPL")
     p.add_argument("--csv", default=None, help="price file to form predictions from")
     p.add_argument("--symbol", default=None)
+    p.add_argument("--offline", action="store_true", help="use only cached prices")
     p.add_argument("--signal", default=None, help="restrict scoring to one signal")
     p.add_argument("--start", default="2015-01-01")
     p.add_argument("--horizon", type=int, default=30, help="calendar days to hold")
@@ -1283,6 +1327,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--session", type=int, default=0, help="which session to analyse in detail")
     p.add_argument("--compare", default=None, help="second intraday file, for the Epps curve")
     p.set_defaults(func=cmd_intraday)
+
+    p = sub.add_parser("serve", help="search bar: type a ticker in your browser")
+    p.add_argument("--host", default="127.0.0.1", help="bind address (localhost by default)")
+    p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--no-browser", action="store_true", help="do not open a browser window")
+    p.set_defaults(func=cmd_serve)
 
     p = sub.add_parser("doctor", help="environment and import check")
     p.set_defaults(func=cmd_doctor)

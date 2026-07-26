@@ -89,8 +89,7 @@ def render_text(report: ResearchReport) -> str:
         add(f"  annualised return        {_fmt(report.annualised_return)}")
         add(f"  Sharpe ratio             {_fmt(report.sharpe, '.3f')}")
         if np.isfinite(report.sharpe_standard_error):
-            annual_se = report.sharpe_standard_error * np.sqrt(252.0)
-            add(f"    standard error         {annual_se:.3f}")
+            add(f"    standard error         {report.sharpe_standard_error:.3f}")
             verdict = (
                 "distinguishable from zero"
                 if report.sharpe_is_significant

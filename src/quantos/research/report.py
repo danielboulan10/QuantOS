@@ -97,6 +97,15 @@ class ResearchReport:
     annualised_return: float = float("nan")
     annualised_volatility: float = float("nan")
     sharpe: float = float("nan")
+    #: Standard error of :attr:`sharpe`, in the SAME (annualised) units.
+    #:
+    #: Stored annualised deliberately. It was previously kept per-period while
+    #: ``sharpe`` was annualised, so every reader had to remember to multiply by
+    #: sqrt(252) -- and a caller who forgot got a standard error 16x too small,
+    #: which made a Sharpe of 0.51 look significant at 25 standard errors. Two
+    #: call sites did the multiplication correctly and the third did not.
+    #: Fields whose units differ from their sibling are a trap; this one no
+    #: longer is.
     sharpe_standard_error: float = float("nan")
     sortino: float = float("nan")
     max_drawdown: float = float("nan")
@@ -146,8 +155,7 @@ class ResearchReport:
         """
         if not (np.isfinite(self.sharpe) and self.sharpe_standard_error > 0):
             return False
-        annual_se = self.sharpe_standard_error * float(np.sqrt(TRADING_DAYS))
-        return bool(abs(self.sharpe / annual_se) > 1.96)
+        return bool(abs(self.sharpe / self.sharpe_standard_error) > 1.96)
 
 
 def _volatility_regimes(
@@ -221,6 +229,16 @@ def _factor_exposure(
     equity returns are decimals, so a raw regression gives betas of order 1e-5
     that print as 0.0000. Rate factors are rescaled to decimals so the
     coefficient is a duration-like number a reader can interpret.
+
+    Alignment
+        Factors may be passed on the instrument's own date grid with ``NaN``
+        where a factor has no observation, which is the safe way to hand over
+        series that end on different days. Rows where the return or any factor is
+        missing are dropped together, so every remaining row is a genuine
+        same-day pairing. The previous version instead matched the *trailing* N
+        observations of each series, which silently pairs mismatched dates
+        whenever one series ends a day later than another -- as the high-yield
+        credit series routinely does.
     """
     from quantos.core.timeseries.ols import ols
 
@@ -228,7 +246,18 @@ def _factor_exposure(
     if not names:
         return None
 
-    length_all = min([returns.size] + [factors[n].size for n in names])
+    # Same-length columns are required before rows can be dropped jointly.
+    aligned_length = min([returns.size] + [factors[n].size for n in names])
+    stacked = np.column_stack(
+        [returns[-aligned_length:]] + [factors[n][-aligned_length:] for n in names]
+    )
+    complete = np.all(np.isfinite(stacked), axis=1)
+    if int(np.sum(complete)) < 100:
+        return None
+    returns = stacked[complete, 0]
+    factors = {name: stacked[complete, i + 1] for i, name in enumerate(names)}
+
+    length_all = returns.size
     usable: dict[str, NDArray[np.float64]] = {}
     dropped: list[str] = []
     for name in names:
@@ -402,7 +431,10 @@ def generate_report(
         if years > 0 and total > 0:
             report.annualised_return = float(total ** (1.0 / years) - 1.0)
         report.sharpe = sharpe_ratio(returns, risk_free=risk_free, periods_per_year=TRADING_DAYS)
-        report.sharpe_standard_error = sharpe_ratio_with_moments(returns).standard_error
+        # Annualised to match `sharpe`; see the field's comment.
+        report.sharpe_standard_error = float(
+            sharpe_ratio_with_moments(returns).standard_error * np.sqrt(TRADING_DAYS)
+        )
         report.sortino = sortino_ratio(returns, periods_per_year=TRADING_DAYS)
         depth, _, _ = max_drawdown(instrument.prices)
         report.max_drawdown = depth

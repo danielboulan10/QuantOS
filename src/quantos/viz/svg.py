@@ -79,6 +79,9 @@ class Figure:
     _elements: list[str] = field(default_factory=list)
     _x_range: tuple[float, float] = (0.0, 1.0)
     _y_range: tuple[float, float] = (0.0, 1.0)
+    #: Axis label formatter for the x axis. Set to ``"year"`` when the x values
+    #: are fractional calendar years.
+    x_tick_style: str = "auto"
     _legend: list[tuple[str, str]] = field(default_factory=list)
 
     def set_ranges(
@@ -141,10 +144,15 @@ class Figure:
                 f'y2="{t.margin_top + t.plot_height:.1f}" stroke="{t.grid}" '
                 f'stroke-width="1"/>'
             )
+            label = (
+                _format_year(float(value))
+                if self.x_tick_style == "year"
+                else _format_tick(float(value))
+            )
             self._elements.append(
                 f'<text x="{px:.1f}" y="{t.margin_top + t.plot_height + 18:.1f}" '
                 f'text-anchor="middle" fill="{t.text}" font-family="{t.font_family}" '
-                f'font-size="{t.font_size - 1}">{_format_tick(float(value))}</text>'
+                f'font-size="{t.font_size - 1}">{label}</text>'
             )
         return self
 
@@ -368,6 +376,16 @@ def _decimate_min_max(
     return x[index], y[index]
 
 
+def _format_year(value: float) -> str:
+    """Axis label for a calendar year.
+
+    Years are the one common axis where the default grouping is wrong: 2017
+    formatted as a magnitude becomes "2,017", which reads as a quantity rather
+    than a date. Charts plotted against fractional years pass this instead.
+    """
+    return f"{value:.0f}"
+
+
 def _format_tick(value: float) -> str:
     """Compact axis label: avoids both scientific noise and long decimals."""
     if value == 0:
@@ -395,6 +413,7 @@ def line_chart(
     y_label: str = "",
     theme: Theme | None = None,
     zero_line: bool = False,
+    x_tick_style: str = "auto",
 ) -> Figure:
     """One or more labelled line series on shared axes.
 
@@ -406,7 +425,13 @@ def line_chart(
         >>> svg.startswith("<svg") and svg.endswith("</svg>")
         True
     """
-    figure = Figure(title=title, x_label=x_label, y_label=y_label, theme=theme or Theme())
+    figure = Figure(
+        title=title,
+        x_label=x_label,
+        y_label=y_label,
+        theme=theme or Theme(),
+        x_tick_style=x_tick_style,
+    )
     all_x = np.concatenate([np.asarray(x, dtype=float).ravel() for x, _ in series.values()])
     all_y = np.concatenate([np.asarray(y, dtype=float).ravel() for _, y in series.values()])
     figure.set_ranges(all_x, all_y)

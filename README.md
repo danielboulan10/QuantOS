@@ -1,9 +1,19 @@
 # QuantOS
 
-A quantitative research platform: a limit order book, an agent-based market, a
-microstructure and risk toolkit validated against ground truth, the statistical
-machinery for not fooling yourself about a backtest — and a path from all of it
-to **live market and macroeconomic data**.
+**Type a ticker. Get a full quantitative research report.**
+
+```bash
+quantos serve            # a search bar in your browser
+quantos research --ticker NVDA     # or straight from the terminal
+```
+
+No API key, no data file, no account. Any listed symbol — US equities, ETFs,
+indices, foreign listings, crypto — resolves to ten years of split- and
+dividend-adjusted history and runs through the whole pipeline: return
+distribution and tail behaviour, risk and drawdown, GARCH volatility dynamics,
+regime detection, factor exposures with HAC standard errors, a pre-registered
+signal battery corrected for multiple testing, an option strike ladder with full
+Greeks, and square-root execution costs.
 
 **One runtime dependency: NumPy.** Every special function, distribution,
 statistical test, optimiser, root finder, chart and data feed is implemented in
@@ -14,37 +24,78 @@ in [DDR-002](docs/ddr/DDR-002-numpy-only-runtime.md).
 ```bash
 pip install -e ".[test]"
 
-quantos research --csv AAPL.csv           # full research report on any instrument
+quantos serve                             # search bar at localhost:8000
+quantos research --ticker AAPL            # any listed symbol, no key required
+quantos research --ticker ^GSPC           # indices, crypto (BTC-USD), LSE (VOD.L)
+quantos research --csv my_prices.csv      # or your own file
 quantos research --series spx             # or anything on FRED
+quantos forward   --ticker SPY            # record predictions, scored later
+quantos surface   --chain chain.csv       # SVI vol surface, variance risk premium
+quantos intraday  --csv ticks.csv         # noise-corrected realised volatility
 quantos demo                              # tour every subsystem, ~2 minutes
-pytest                                    # 489 tests, incl. every docstring example
+pytest                                    # 627 tests, incl. every docstring example
 ```
 
-## `quantos research` — one instrument in, a full report out
+## The search bar
 
-Plug in a stock, ETF, index, rate, future or commodity. The tool runs every
-analysis that *applies to that asset class*, skips the ones that do not, and says
-why — an option does not get a Sharpe ratio, because its return distribution is
-dominated by payoff convexity rather than by any edge.
+`quantos serve` starts a local viewer: type a symbol, get the report with charts.
+It is stdlib `http.server` and hand-written HTML — no Flask, no JavaScript
+charting library, and the SVG comes from this repository's own renderer, because
+DDR-002 fixes the runtime dependencies at NumPy alone and a web view is not a
+good enough reason to break that. It binds to localhost and has no
+authentication: a local viewer for a research tool, not a deployable service.
+
+The page leads with what the analysis can and cannot do. **Volatility is
+genuinely forecastable** — it clusters, and the GARCH persistence and half-life
+measured on the instrument's own history are that predictability quantified — so
+the viewer gives a volatility forecast and the price range it implies.
+**Direction is not**, on this evidence, and the page says so rather than
+manufacturing a target: the signal battery below it shows nine standard
+predictors judged only after correcting for the fact that nine were tried.
+
+## `quantos research` — one ticker in, a full report out
+
+It runs every analysis that *applies to that asset class*, skips the ones that do
+not, and says why — an option does not get a Sharpe ratio, because its return
+distribution is dominated by payoff convexity rather than by any edge. The asset
+class comes from the exchange, not from a flag you have to remember to set.
 
 ```console
-$ quantos research --csv SPY.csv --asset-class etf
+$ quantos research --ticker NVDA
 
-RETURN DISTRIBUTION      annualised vol 18.10%, skew -0.65, excess kurtosis 16.8
-                         Hill tail index 2.57  ->  fat-tailed; Gaussian VaR understates
-RISK                     Sharpe 0.61  (standard error 0.40  ->  NOT distinguishable from zero)
-                         max drawdown -33.92%, 340 days underwater
-                         VaR/CVaR 99%: 3.44% / 5.16%   ->  CVaR/VaR = 1.50
-VOLATILITY               Engle ARCH-LM p = 7e-164  ->  clustering is real, fit GARCH
-                         persistence 0.9723, shock half-life 24.7 days
-                         leverage gamma 0.214  ->  down moves raise vol more than up
-REGIMES                  8 volatility regimes since 2015, identified without look-ahead
-FACTORS                  rates_10y beta -3.79 (t -6.7), credit_hy beta -8.82 (t -11.9)
-                         56% idiosyncratic
+resolved NVDA (NVIDIA Corporation) [equity on NasdaqGS in USD]
+  2514 daily bars, 2016-07-25..2026-07-24, adjusted close
+
+RETURN DISTRIBUTION      annualised vol 49.61%, skew 0.076, excess kurtosis 6.46
+                         Hill tail index 3.18  ->  fat-tailed; Gaussian VaR understates
+RISK                     Sharpe 1.015  (standard error 0.317  ->  distinguishable from zero)
+                         max drawdown -66.34%, 373 days underwater
+                         VaR/CVaR 99%: 7.97% / 10.79%   ->  CVaR/VaR = 1.35
+VOLATILITY               Engle ARCH-LM p = 2.9e-14  ->  clustering is real, fit GARCH
+                         GARCH(1,1) persistence 0.9161, shock half-life 7.9 days
+                         leverage gamma  ->  down moves raise vol more than up
+REGIMES                  volatility regimes identified without look-ahead
+FACTORS                  market beta 2.31 (t 12.5), HAC standard errors, 53% idiosyncratic
 SIGNALS                  9 pre-registered signals, all corrected for multiple testing
 OPTIONS                  30-day strike ladder with all Greeks at realised vol
 EXECUTION                square-root impact cost by participation rate
 ```
+
+Prices are **total-return adjusted**, and that is not a detail. Measured across
+ten years of history, using unadjusted closes changes the answer:
+
+| | raw CAGR | adjusted CAGR |
+|---|---:|---:|
+| Verizon (VZ) | **−1.85%** | **+3.59%** |
+| Exxon (XOM) | 5.48% | 10.17% |
+| Coca-Cola (KO) | 6.10% | 9.47% |
+| Berkshire (BRK-B) | 13.16% | 13.16% |
+
+On raw prices Verizon *lost* money over a decade; on a total-return basis it made
+money. The sign of the conclusion flips. Berkshire, which pays no dividend, shows
+a gap of exactly zero — which is the control that confirms the mechanism rather
+than a coincidence. Nothing about this raises an error, which is what makes it
+worth being deliberate about. See [`data/market.py`](src/quantos/data/market.py).
 
 ### The signal battery is the point
 
@@ -373,6 +424,7 @@ Read in this order if you want the argument rather than the API.
 | [`live/ledger.py`](src/quantos/live/ledger.py) | Append-only forward-testing ledger, hash-chained. The only validation here that needs no correction. |
 | [`research/vol_surface.py`](src/quantos/research/vol_surface.py) | SVI smile fitting with butterfly and calendar arbitrage checks; model-free implied variance and the variance risk premium. |
 | [`research/intraday.py`](src/quantos/research/intraday.py) | Realised variance, bipower variation, two-scale (ZMA), jump testing, signature plots, the Epps effect. |
+| [`data/market.py`](src/quantos/data/market.py) | Keyless ticker fetch with disk cache, offline mode, and total-return adjustment. Turns `--ticker AAPL` into a price series. |
 | [`data/options.py`](src/quantos/data/options.py) · [`data/intraday.py`](src/quantos/data/intraday.py) | Option-chain and tick loaders. Both are mostly filtering, and the filtering is the substance. |
 | [`exchange/_book.cpp`](src/quantos/exchange/_book.cpp) · [`exchange/replay.py`](src/quantos/exchange/replay.py) | The C++ order book and its batched replay path — 16 million operations per second. |
 | [`viz/svg.py`](src/quantos/viz/svg.py) | The chart renderer. Min/max decimation, so a 20,000-point series is 20 KB rather than 546 KB. |
@@ -515,13 +567,21 @@ Empirical size is now 2.7%.
   the whole point of it — so it proves nothing on the day you clone this. It
   becomes evidence only after months of running, and the repository ships the
   mechanism rather than a track record.
-- **Real data is read-only, and nothing intraday ships with it.** `quantos.data`
-  reaches FRED for indices, rates, credit and macro, and reads CSVs for
-  everything else — including intraday bars, ticks and option chains, which it
-  will parse but does not provide. Real tick and option data are not free. So the
-  intraday and surface estimators are validated against *simulated* ground truth
-  where the answer is known, and merely *applied* to whatever file you supply.
-  That is the honest ordering: the tests prove the estimator, not the data.
+- **The ticker feed depends on an undocumented endpoint.** `--ticker` fetches
+  daily bars from Yahoo's public chart API, which needs no key but is not a
+  supported, documented service: it can change shape or start rate-limiting
+  without notice, and this will break when it does. Every response is cached on
+  disk so previously-fetched history keeps working offline, and the fetch is
+  isolated behind one class returning the same `PriceSeries` the CSV loader
+  produces — so swapping the source, or falling back to `--csv`, changes one file.
+  Nothing here is real-time; it is delayed daily bars, for research.
+- **Nothing intraday or optional ships with the repo.** `quantos.data` reaches
+  FRED for rates, credit and macro, fetches daily bars by ticker, and *parses*
+  intraday ticks and option chains — but does not provide them. Real tick and
+  option data are not free. So the intraday and surface estimators are validated
+  against *simulated* ground truth where the answer is known, and merely
+  *applied* to whatever file you supply. That is the honest ordering: the tests
+  prove the estimator, not the data.
 - **Nothing here is investment advice**, and no strategy in this repository
   makes money. It is research infrastructure.
 - **The simulation is calibrated, and says so.** Realistic behaviour occupies a
