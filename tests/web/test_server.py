@@ -41,9 +41,7 @@ def test_the_landing_page_states_what_is_not_forecast():
 def _accepted(ticker: str) -> bool:
     """The handler's validation rule, as applied in do_GET."""
     cleaned = ticker.strip()
-    return bool(cleaned) and len(cleaned) <= 24 and all(
-        c.isalnum() or c in "^.-=" for c in cleaned
-    )
+    return bool(cleaned) and len(cleaned) <= 24 and all(c.isalnum() or c in "^.-=" for c in cleaned)
 
 
 @pytest.mark.parametrize(

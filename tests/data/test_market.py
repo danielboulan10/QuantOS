@@ -121,9 +121,7 @@ def test_null_bars_are_dropped_not_carried_forward():
     understates volatility and fabricates autocorrelation -- which the momentum
     and mean-reversion signals would then happily trade on.
     """
-    series, _ = MarketDataClient._parse(
-        payload(closes=[100.0, None, 102.0, None, 104.0]), "TEST"
-    )
+    series, _ = MarketDataClient._parse(payload(closes=[100.0, None, 102.0, None, 104.0]), "TEST")
 
     assert len(series) == 3
     np.testing.assert_allclose(series.prices, [100.0, 102.0, 104.0])
