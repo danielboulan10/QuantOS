@@ -26,3 +26,6 @@ htmlcov/
 *.pyd
 *.dylib
 *.o
+
+# Local editor/agent scratch config, not part of the project.
+.claude/
