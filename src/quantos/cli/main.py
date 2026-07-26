@@ -865,6 +865,186 @@ def cmd_research(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_forward(args: argparse.Namespace) -> int:
+    """Record today's predictions, settle the ones whose horizon has elapsed."""
+    from quantos.data.loader import load_ohlcv_csv
+    from quantos.live.ledger import Ledger, default_ledger_path
+    from quantos.live.runner import run_daily
+
+    ledger = Ledger(args.ledger or default_ledger_path())
+
+    if args.score_only:
+        scored = ledger.score(signal=args.signal, symbol=args.symbol)
+        print(f"forward-testing ledger: {ledger.path}")
+        print(f"  records          {len(ledger.read_all())}")
+        try:
+            ledger.verify_chain()
+            print("  hash chain       intact")
+        except Exception as error:
+            print(f"  hash chain       BROKEN: {error}")
+            return 1
+        for key in (
+            "n_predictions",
+            "n_settled",
+            "n_open",
+            "hit_rate",
+            "hit_rate_95_low",
+            "hit_rate_95_high",
+            "mean_return",
+            "total_return",
+        ):
+            if key in scored:
+                value = scored[key]
+                shown = f"{value:.4f}" if isinstance(value, float) else str(value)
+                print(f"  {key:16s} {shown}")
+        if "note" in scored:
+            print(f"  note: {scored['note']}")
+        if scored.get("n_settled", 0) > 0:
+            print(
+                "\nNo deflation, no purging and no embargo were applied, because none "
+                "are needed: every prediction here was written down before its outcome "
+                "existed."
+            )
+        return 0
+
+    if not args.csv:
+        print("pass --csv with a price file, or --score-only to read the ledger")
+        return 1
+
+    try:
+        series = load_ohlcv_csv(args.csv, symbol=args.symbol).since(args.start)
+    except ValueError as error:
+        print(f"could not load {args.csv}: {error}")
+        return 1
+
+    result = run_daily(ledger, series, horizon_days=args.horizon)
+    print(f"forward cycle for {result['symbol']} as of {series.end}")
+    print(f"  settled          {result['settled']}")
+    print(f"  newly recorded   {result['recorded']}")
+    print(f"  already present  {result['already_present']}")
+    print(f"  open positions   {result['open_after']}")
+    print(f"  hash chain       {'intact' if result['chain_valid'] else 'BROKEN'}")
+    print(f"\nledger: {ledger.path}")
+    return 0
+
+
+def cmd_surface(args: argparse.Namespace) -> int:
+    """Fit a volatility surface to a real option chain."""
+    import datetime
+
+    import numpy as np
+
+    from quantos.data.loader import load_ohlcv_csv
+    from quantos.data.options import ChainFilter, load_option_chain_csv
+    from quantos.research.vol_surface import fit_surface, variance_risk_premium
+
+    as_of = None
+    if args.as_of:
+        try:
+            as_of = datetime.date.fromisoformat(args.as_of)
+        except ValueError:
+            print(f"--as-of must be YYYY-MM-DD, got {args.as_of!r}")
+            return 1
+
+    try:
+        chain = load_option_chain_csv(
+            args.chain,
+            symbol=args.symbol,
+            as_of=as_of,
+            spot=args.spot,
+            rate=args.rate,
+            chain_filter=ChainFilter(otm_only=not args.keep_itm),
+        )
+    except ValueError as error:
+        print(f"could not load {args.chain}: {error}")
+        return 1
+
+    print(chain.summary())
+    if len(chain) == 0:
+        return 1
+
+    print()
+    surface = fit_surface(chain)
+    print(surface.summary())
+
+    if surface.smiles:
+        times, vols = surface.term_structure()
+        _, skews = surface.skew_structure()
+        print("\nterm structure")
+        for t, v, k in zip(times, vols, skews, strict=True):
+            print(f"  T={t:5.3f}  ATM {v:6.2%}  skew {k:+7.3f}")
+
+    if args.underlying:
+        try:
+            price = load_ohlcv_csv(args.underlying, symbol=chain.symbol)
+        except ValueError as error:
+            print(f"\ncould not load {args.underlying}: {error}")
+            return 0
+        returns = np.diff(np.log(price.prices))
+        premium = variance_risk_premium(chain, returns[-args.realised_days :])
+        print()
+        print(premium.summary())
+        for note in premium.notes:
+            print(f"  note: {note}")
+    return 0
+
+
+def cmd_intraday(args: argparse.Namespace) -> int:
+    """Estimate volatility from intraday data, correcting for microstructure noise."""
+    from quantos.data.intraday import load_intraday_csv
+    from quantos.research.intraday import (
+        epps_curve,
+        intraday_seasonality,
+        signature_plot,
+        volatility_report,
+    )
+
+    try:
+        bars = load_intraday_csv(args.csv, symbol=args.symbol, price_column=args.price_column)
+    except ValueError as error:
+        print(f"could not load {args.csv}: {error}")
+        return 1
+
+    print(bars.summary())
+
+    sessions = bars.sessions(min_observations=40)
+    if not sessions:
+        print("\nno session has enough observations for these estimators")
+        return 1
+
+    # Estimate within sessions, never across the overnight gap.
+    target = sessions[args.session] if args.session < len(sessions) else sessions[-1]
+    print(f"\n--- session {min(args.session, len(sessions) - 1)} of {len(sessions)} ---")
+    print(volatility_report(target).summary())
+    print()
+    print(signature_plot(target).summary())
+
+    if len(sessions) >= 5:
+        seasonality = intraday_seasonality(sessions)
+        print(f"\nintraday seasonality across {seasonality.n_sessions} sessions")
+        for position, level in zip(
+            seasonality.time_of_day, seasonality.relative_volatility, strict=True
+        ):
+            bar = "#" * round(level * 20)
+            print(f"  {position:5.2f} of session  {level:5.2f}  {bar}")
+        print(
+            "  U-shaped: "
+            + ("yes, as volume and volatility usually are" if seasonality.is_u_shaped else "no")
+        )
+
+    if args.compare:
+        try:
+            other = load_intraday_csv(args.compare, price_column=args.price_column)
+        except ValueError as error:
+            print(f"\ncould not load {args.compare}: {error}")
+            return 0
+        steps, correlations = epps_curve(target, other.sessions(min_observations=40)[0])
+        print(f"\nEpps curve against {other.symbol}")
+        for step, correlation in zip(steps, correlations, strict=True):
+            print(f"  every {step:5d} obs   correlation {correlation:+.4f}")
+    return 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Import every module and report the environment."""
     import importlib
@@ -1066,6 +1246,43 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--markdown", default=None, help="also write a Markdown report here")
     p.add_argument("--offline", action="store_true")
     p.set_defaults(func=cmd_research)
+
+    p = sub.add_parser("forward", help="append-only forward testing: predict today, score later")
+    p.add_argument("--csv", default=None, help="price file to form predictions from")
+    p.add_argument("--symbol", default=None)
+    p.add_argument("--signal", default=None, help="restrict scoring to one signal")
+    p.add_argument("--start", default="2015-01-01")
+    p.add_argument("--horizon", type=int, default=30, help="calendar days to hold")
+    p.add_argument("--ledger", default=None, help="ledger path (default ~/.quantos)")
+    p.add_argument(
+        "--score-only", action="store_true", help="report the existing record, write nothing"
+    )
+    p.set_defaults(func=cmd_forward)
+
+    p = sub.add_parser("surface", help="fit an SVI volatility surface to an option chain")
+    p.add_argument("--chain", required=True, help="option chain CSV")
+    p.add_argument("--symbol", default=None)
+    p.add_argument("--spot", type=float, default=None, help="underlying price")
+    p.add_argument(
+        "--as-of",
+        default=None,
+        help="quote date (YYYY-MM-DD); defaults to today. Needed for a historical chain.",
+    )
+    p.add_argument("--rate", type=float, default=0.0)
+    p.add_argument("--keep-itm", action="store_true", help="do not filter in-the-money quotes")
+    p.add_argument(
+        "--underlying", default=None, help="price CSV, to measure the variance risk premium"
+    )
+    p.add_argument("--realised-days", type=int, default=63)
+    p.set_defaults(func=cmd_surface)
+
+    p = sub.add_parser("intraday", help="noise-corrected intraday volatility estimation")
+    p.add_argument("--csv", required=True, help="intraday bars or ticks")
+    p.add_argument("--symbol", default=None)
+    p.add_argument("--price-column", default=None, help="override the price column")
+    p.add_argument("--session", type=int, default=0, help="which session to analyse in detail")
+    p.add_argument("--compare", default=None, help="second intraday file, for the Epps curve")
+    p.set_defaults(func=cmd_intraday)
 
     p = sub.add_parser("doctor", help="environment and import check")
     p.set_defaults(func=cmd_doctor)

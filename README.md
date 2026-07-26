@@ -232,6 +232,123 @@ iteration because the textbook fixed point oscillates.
 
 ---
 
+## Four things added most recently
+
+Each of these exists because the previous version of this README admitted it was
+missing, and each one is validated against a case where the answer is known.
+
+### A C++ order book — and the measurement that made it worth building
+
+The obvious way to use a compiled order book is to call it once per operation.
+That was built first and benchmarked at **1.2x** the pure Python book, which is
+not worth a build step. Profiling showed why: **83% of the runtime was Python
+object churn**, not matching. The C++ core was never the bottleneck.
+
+Batching the tape across the boundary removes it:
+
+| Path | ops/s (median) | speedup |
+|---|---:|---:|
+| Pure Python, `Order` dataclass | ~435,000 | 1.0x |
+| C++ through the per-call wrapper | ~660,000 | 1.5x |
+| C++ raw, no dataclass, no wrapper | ~3,800,000 | 8.7x |
+| **C++ batched** ([`replay.py`](src/quantos/exchange/replay.py)) | **~15,100,000** | **~35x** |
+
+Medians of repeated runs, rounded — the batched figure ranged from 8.1M to 16.5M
+across seven runs of the same two-million-operation tape on an unquiet laptop.
+An earlier draft of this table quoted `16,012,260`, which was a single run near
+the top of that range, reported to six significant figures it had not earned.
+Wall-clock throughput is not a precise quantity and should not be written as one.
+
+The compiled backend is optional and never committed as a binary.
+[`tests/exchange/test_cpp_equivalence.py`](tests/exchange/test_cpp_equivalence.py)
+replays identical order flow through both implementations — a Hypothesis-driven
+comparison plus a 20,000-operation deterministic replay — and requires every
+resting order to match. Matching is exact integer arithmetic, so "close enough"
+is not a category that exists here.
+
+### Forward testing, which is the only backtest that cannot be overfit
+
+Everything else in this repository that validates a strategy is a *correction*:
+deflated Sharpe, PBO, purged cross-validation, Hansen's SPA. They all exist
+because the researcher saw the data before choosing the strategy.
+
+[`quantos/live`](src/quantos/live) needs none of them. A prediction written down
+today, for a horizon that has not happened yet, cannot be tuned to its own
+outcome. The ledger is append-only JSONL with a SHA-256 hash chain: recording an
+outcome *appends* a settlement rather than editing the forecast, there is no
+update path in the API, and editing any earlier line breaks every subsequent
+hash. Re-running the same day is refused, because prediction ids are derived from
+the content of the decision rather than a counter.
+
+```bash
+quantos forward --csv prices.csv --symbol SPY     # settle what is due, record today
+quantos forward --score-only                      # read the record back
+```
+
+The scoring reports a Wilson interval, not a bare hit rate, because three correct
+calls out of three is not evidence of skill and the interval says so.
+
+### Option chains, and what the options market charges for risk
+
+[`data/options.py`](src/quantos/data/options.py) is mostly filtering, and the
+filtering is the substance: in-the-money options are dropped (their prices are
+dominated by intrinsic value, so implied volatility is badly conditioned there),
+zero-bid contracts are dropped (a midpoint invented from a 0.00 bid sets the tail
+of the surface), and the forward is recovered from **put-call parity** rather
+than assumed from a dividend yield — using spot instead tilts the whole smile and
+the tilt reads as skew.
+
+[`research/vol_surface.py`](src/quantos/research/vol_surface.py) fits Gatheral's
+SVI and checks both no-arbitrage conditions explicitly, because a curve can be
+smooth, accurate, and still price a butterfly at a negative value. It also
+computes **model-free implied variance** — the CBOE's own VIX construction — and
+differences it against realised variance to measure the variance risk premium.
+
+Two findings came out of building it. SVI is over-parameterised, so the optimiser
+*never* reports convergence — 20,000 iterations on a clean synthetic smile still
+said "failed" while recovering the true skew to four decimals — which is why
+convergence here is judged on whether the fitted **curve** has stopped moving,
+not the parameters. And an earlier version reported a successful restart as a
+failure; it now iterates to a fixed point.
+
+### Intraday data, where the textbook estimator is worst
+
+Realised variance is consistent for integrated variance as sampling gets finer.
+That is a theorem, and following it literally is one of the most reliably wrong
+things you can do with tick data, because observed prices carry microstructure
+noise and its contribution grows **linearly in the number of observations**.
+
+On a simulated session at a known 28% volatility, sampled every second with
+realistic noise:
+
+```
+every observation        49.77%   <- the textbook estimator
+every   49 observations  28.70%   <- sparse, at the MSE-optimal step
+two-scale (ZMA)          28.45%   <- noise-corrected
+bipower (jump-robust)    28.84%
+noise sd per obs        1.23e-04   (true value 1.2e-04)
+```
+
+Building this turned up two defects worth recording. The standard shortcut for
+estimating noise variance, `RV/(2n)`, cannot distinguish volatility from noise:
+on *clean* data it reported an implied noise level larger than the real noise in
+a genuinely noisy series, which then told the sampler to discard 90% of a clean
+sample. It now measures noise as the excess of fast over sparse sampling, and
+gates on whether that excess is statistically distinguishable from zero at all.
+
+Second, ZMA's rate-optimal subgrid rule of `K ~ n^(2/3)` is asymptotically
+correct and poor at the sample sizes a real session provides — it leaves 29
+returns per subgrid. Measured across sample sizes and four orders of magnitude of
+noise, `K ~ n^(1/3)` had **2.2x to 5.1x lower RMSE in every case tested**. The
+noise correction is unbiased at any `K`, so that trades no accuracy for variance.
+
+```bash
+quantos surface  --chain chain.csv --as-of 2024-06-20 --underlying prices.csv
+quantos intraday --csv ticks.csv --compare other_ticks.csv
+```
+
+---
+
 ## Repository map
 
 Read in this order if you want the argument rather than the API.
@@ -253,6 +370,11 @@ Read in this order if you want the argument rather than the API.
 | [`execution/almgren_chriss.py`](src/quantos/execution/almgren_chriss.py) | Optimal execution frontier, square-root impact law and a test of its exponent. |
 | [`probability/problems.py`](src/quantos/probability/problems.py) | Ten classic problems, each solved analytically *and* by simulation, required to agree. |
 | [`data/`](src/quantos/data) | Keyless FRED client with disk caching, CSV loader for stocks/ETFs, series catalogue, and the analysis pipeline. |
+| [`live/ledger.py`](src/quantos/live/ledger.py) | Append-only forward-testing ledger, hash-chained. The only validation here that needs no correction. |
+| [`research/vol_surface.py`](src/quantos/research/vol_surface.py) | SVI smile fitting with butterfly and calendar arbitrage checks; model-free implied variance and the variance risk premium. |
+| [`research/intraday.py`](src/quantos/research/intraday.py) | Realised variance, bipower variation, two-scale (ZMA), jump testing, signature plots, the Epps effect. |
+| [`data/options.py`](src/quantos/data/options.py) · [`data/intraday.py`](src/quantos/data/intraday.py) | Option-chain and tick loaders. Both are mostly filtering, and the filtering is the substance. |
+| [`exchange/_book.cpp`](src/quantos/exchange/_book.cpp) · [`exchange/replay.py`](src/quantos/exchange/replay.py) | The C++ order book and its batched replay path — 16 million operations per second. |
 | [`viz/svg.py`](src/quantos/viz/svg.py) | The chart renderer. Min/max decimation, so a 20,000-point series is 20 KB rather than 546 KB. |
 | [`docs/ers/`](docs/ers) · [`docs/ddr/`](docs/ddr) | Engineering specs and Design Decision Records — every significant choice, with its alternatives. |
 
@@ -385,14 +507,21 @@ Empirical size is now 2.7%.
 
 ## Honest limitations
 
-- **Python, not C++.** The order book is fast for pure Python and slow for a real
-  venue. The APIs are shaped so a Rust or C++ core could slot in behind them, but
-  that has not been done.
-- **Real data is read-only and daily.** `quantos.data` reaches FRED for indices,
-  rates, credit and macro, and reads CSVs for anything else. There is no
-  intraday data, no tick data, no order-book data for real markets — those are
-  not free. The microstructure estimators are therefore validated against
-  *simulated* ground truth and merely *applied* to real series.
+- **The C++ book is optional, and the Python one is the specification.** The
+  compiled backend is 30x faster in batch, but it is a second implementation of
+  behaviour defined by the pure Python book, and the equivalence test is what
+  keeps them honest. If they ever disagree, the Python one is right.
+- **The forward-testing ledger starts empty.** It cannot be otherwise — that is
+  the whole point of it — so it proves nothing on the day you clone this. It
+  becomes evidence only after months of running, and the repository ships the
+  mechanism rather than a track record.
+- **Real data is read-only, and nothing intraday ships with it.** `quantos.data`
+  reaches FRED for indices, rates, credit and macro, and reads CSVs for
+  everything else — including intraday bars, ticks and option chains, which it
+  will parse but does not provide. Real tick and option data are not free. So the
+  intraday and surface estimators are validated against *simulated* ground truth
+  where the answer is known, and merely *applied* to whatever file you supply.
+  That is the honest ordering: the tests prove the estimator, not the data.
 - **Nothing here is investment advice**, and no strategy in this repository
   makes money. It is research infrastructure.
 - **The simulation is calibrated, and says so.** Realistic behaviour occupies a
