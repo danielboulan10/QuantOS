@@ -528,3 +528,33 @@ class LimitOrderBook:
                 f"order index holds {len(self._order_index)} orders but "
                 f"{seen} are reachable from the levels"
             )
+
+
+# --------------------------------------------------------------------------- #
+# Backend selection                                                           #
+# --------------------------------------------------------------------------- #
+def best_available_book() -> type:
+    """The fastest correct book available in this environment.
+
+    Returns the C++ backend when the optional extension has been built, and the
+    pure Python one otherwise. Both produce identical results -- matching is
+    exact integer arithmetic, and ``tests/exchange/test_cpp_equivalence.py``
+    drives both through the same random operation sequences and asserts the
+    resulting book states match exactly.
+
+    Callers who need a guaranteed backend should name it directly rather than
+    calling this.
+    """
+    try:
+        from quantos.exchange.fastbook import EXTENSION_AVAILABLE, FastLimitOrderBook
+
+        if EXTENSION_AVAILABLE:
+            return FastLimitOrderBook
+    except ImportError:  # pragma: no cover - extension absent
+        pass
+    return LimitOrderBook
+
+
+#: Which backend :func:`best_available_book` would return. Reported by
+#: ``quantos doctor`` so the active configuration is never a guess.
+BACKEND: str = "cpp" if best_available_book() is not LimitOrderBook else "python"

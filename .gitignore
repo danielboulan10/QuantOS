@@ -18,3 +18,11 @@ htmlcov/
 
 .hypothesis/
 .coverage
+
+# Compiled C++ order-book accelerator. Built by scripts/build_extension.py, never
+# committed: a binary in the tree would be wrong for every platform but the one it
+# was built on, and the pure Python book is the source of truth for behaviour.
+*.so
+*.pyd
+*.dylib
+*.o

@@ -220,8 +220,65 @@ def bench_simulation(seconds: float = 5.0) -> Result:
     )
 
 
+def bench_order_book_cpp(n: int = 500_000) -> Result:
+    """The same mixed workload on the C++ backend, for a like-for-like ratio."""
+    from quantos.exchange.fastbook import EXTENSION_AVAILABLE, FastLimitOrderBook
+
+    if not EXTENSION_AVAILABLE:
+        return Result("order_book_mixed_cpp", 0, 1.0, notes="extension not built")
+
+    book = FastLimitOrderBook()
+    rng = random.Random(12345)  # same seed as the Python benchmark
+    live: list[int] = []
+    order_id = 0
+    start = time.perf_counter()
+    for _ in range(n):
+        roll = rng.random()
+        if roll < 0.55 or not live:
+            order_id += 1
+            side = Side.BUY if rng.random() < 0.5 else Side.SELL
+            price = rng.randint(9_950, 10_050)
+            opposing = book.best_ask if side is Side.BUY else book.best_bid
+            if opposing is not None:
+                price = (
+                    min(price, int(opposing) - 1)
+                    if side is Side.BUY
+                    else max(price, int(opposing) + 1)
+                )
+            if price <= 0:
+                continue
+            try:
+                book.add(
+                    Order(
+                        OrderId(order_id),
+                        AgentId("a"),
+                        side,
+                        Quantity(rng.randint(1, 100)),
+                        Ticks(price),
+                    )
+                )
+                live.append(order_id)
+            except Exception:
+                pass
+        elif roll < 0.90:
+            with contextlib.suppress(OrderNotFound):
+                book.cancel(OrderId(live.pop(rng.randrange(len(live)))))
+        else:
+            target = live[rng.randrange(len(live))]
+            if target in book:
+                book.amend(OrderId(target), Quantity(rng.randint(1, 120)))
+    elapsed = time.perf_counter() - start
+    return Result(
+        "order_book_mixed_cpp",
+        n,
+        elapsed,
+        notes=f"{len(book):,} resting (identical workload to the Python run)",
+    )
+
+
 BENCHMARKS = [
     bench_order_book,
+    bench_order_book_cpp,
     bench_order_book_cancel_only,
     bench_matching,
     bench_special_functions,
@@ -254,6 +311,15 @@ def main() -> int:
         print(f"{result.name:<38}{result.rate:>16,.0f}{result.unit:>12}")
         if result.notes:
             print(f"{'':<38}  {result.notes}")
+
+    # The speedup is the headline number, so compute it rather than leaving the
+    # reader to divide two rows.
+    by_name = {r.name: r for r in suite.results}
+    py = by_name.get("order_book_mixed")
+    cpp = by_name.get("order_book_mixed_cpp")
+    if py and cpp and cpp.operations:
+        print("-" * 72)
+        print(f"{'C++ speedup on the mixed workload':<38}{cpp.rate / py.rate:>15,.1f}x")
 
     if args.json:
         args.json.write_text(

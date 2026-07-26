@@ -133,6 +133,43 @@ jobs:
       - run: pip install -e ".[test]"
       - run: python benchmarks/run_benchmarks.py
 
+  cpp-extension:
+    # The C++ book is optional, so it would be easy for it to rot unnoticed: the
+    # rest of the suite passes without it. This job builds it and re-runs the
+    # exchange tests against the compiled backend, so the equivalence test is
+    # actually exercised rather than skipped.
+    name: C++ backend equivalence
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -e ".[test]"
+      - name: build the extension
+        run: python scripts/build_extension.py
+      - name: confirm the compiled backend is the one in use
+        run: |
+          python scripts/build_extension.py --check
+          python - <<'PY'
+          from quantos.exchange.book import BACKEND
+          assert BACKEND == "cpp", f"expected the C++ backend, got {BACKEND!r}"
+          print("backend:", BACKEND)
+          PY
+      - name: the two implementations agree
+        run: python -m pytest tests/exchange -q
+      - name: batched replay throughput
+        run: |
+          python - <<'PY'
+          from quantos.exchange.replay import replay_tape, synthetic_tape
+          result, _ = replay_tape(synthetic_tape(1_000_000, seed=7))
+          print(f"{result.operations_per_second:,.0f} ops/s over {result.operations:,} ops")
+          assert result.operations_per_second > 1e6, "batched replay lost an order of magnitude"
+          PY
+
   gallery:
     # The gallery must stay regenerable: a figure that only exists because it was
     # committed once is a figure that will silently go stale.
