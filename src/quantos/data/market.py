@@ -1,4 +1,4 @@
-"""Fetch daily prices for any listed ticker, without an API key.
+r"""Fetch daily prices for any listed ticker, without an API key.
 
 What this makes possible
 ------------------------
@@ -41,6 +41,18 @@ that confirms this is the dividend mechanism rather than a coincidence.
 
 So the adjusted series is the default, and the raw one is available only by
 asking for it explicitly.
+
+A trap this module closes
+-------------------------
+Asking this endpoint for ``range=max`` with ``interval=1d`` returns **monthly**
+bars. It does not error; it silently reports ``dataGranularity="1mo"`` and hands
+back 403 rows for 21 years where daily data would be 5,000. A caller who did not
+check would annualise monthly returns by :math:`\sqrt{252}` and overstate
+volatility by a factor of about 4.6, with nothing anywhere raising.
+
+So the granularity in the response is checked against the granularity requested,
+and a mismatch raises. Use ``20y`` rather than ``max`` for long histories: it
+returns genuine daily bars.
 
 On depending on an undocumented endpoint
 -----------------------------------------
@@ -192,7 +204,9 @@ class MarketDataClient:
             produces, so every downstream tool works unchanged.
         Inputs
             ``ticker`` -- e.g. ``AAPL``, ``SPY``, ``^GSPC``, ``VOD.L``, ``BTC-USD``.
-            ``range_key`` -- Yahoo range token: ``1y``, ``5y``, ``10y``, ``max``.
+            ``range_key`` -- range token: ``1y``, ``5y``, ``10y``, ``20y``. Avoid
+            ``max``, which returns monthly bars and is refused; see the module
+            docstring.
             ``adjusted`` -- use split- and dividend-adjusted closes. Leave this
             alone unless you specifically want raw prices; see the module
             docstring for what raw closes do to a return series.
@@ -246,6 +260,7 @@ class MarketDataClient:
 
         series, info = self._parse(payload, ticker, adjusted=adjusted)
         detail["source"] = source
+        detail["granularity"] = "1d"
         detail["adjusted"] = "yes" if adjusted else "no (raw closes: splits are NOT removed)"
         return (
             PriceSeries(
@@ -316,6 +331,17 @@ class MarketDataClient:
 
         if not prices:
             raise MarketDataError(f"{ticker}: every returned bar was empty")
+
+        # The endpoint silently downgrades granularity for some ranges; see the
+        # module docstring. Daily arithmetic on monthly bars is wrong by sqrt(21)
+        # and raises nothing, so it is refused here rather than propagated.
+        granularity = str(meta.get("dataGranularity", "")).lower()
+        if granularity and granularity not in {"1d", "1day"}:
+            raise MarketDataError(
+                f"{ticker}: asked for daily bars but the service returned "
+                f"{granularity!r} data ({len(prices)} rows). This happens with "
+                "range='max'; use range_key='20y' for a long daily history."
+            )
 
         instrument = str(meta.get("instrumentType", "")).upper()
         info = TickerInfo(

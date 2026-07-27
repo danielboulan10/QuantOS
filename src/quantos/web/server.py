@@ -244,6 +244,109 @@ def _volatility_history(dates: Any, prices: Any, report: Any) -> str:
     return str(figure.render())
 
 
+def _fan_chart(dates: Any, prices: Any, ensemble: Any, symbol: str) -> str:
+    """400 bars of history, then the simulated forward distribution."""
+    from quantos.viz.svg import fan_chart
+
+    history_len = min(400, len(prices))
+    hx = _as_years(dates)[-history_len:]
+    hy = np.asarray(prices, dtype=float)[-history_len:]
+    step = float(np.median(np.diff(hx))) if hx.size > 1 else 1 / 252
+    fx = hx[-1] + step * np.arange(ensemble.horizon + 1)
+
+    return str(
+        fan_chart(
+            hx,
+            hy,
+            fx,
+            ensemble.quantile_bands((0.05, 0.25, 0.50, 0.75, 0.95)),
+            title=f"{symbol} — {history_len} bars of history, {ensemble.horizon} simulated forward",
+            x_label="year",
+            y_label="price",
+            x_tick_style="year",
+        ).render()
+    )
+
+
+def _forecast_section(price: Any, report: Any, info: Any) -> str:
+    """The forward-looking half: fan chart, probabilities, long vs short."""
+    from quantos.forecast import (
+        long_short_comparison,
+        probability_report,
+        simulate_garch_paths,
+    )
+
+    returns = np.diff(np.log(np.asarray(price.prices, dtype=float)))
+    if returns.size < 200:
+        return ""
+
+    horizon = 160
+    ensemble = simulate_garch_paths(returns, float(price.prices[-1]), horizon, n_paths=20_000)
+    probabilities = probability_report(ensemble, symbol=info.ticker)
+    sides = long_short_comparison(ensemble, symbol=info.ticker)
+
+    def rows(mapping: dict[str, float]) -> str:
+        return "".join(
+            f"<tr><td>{html.escape(label)}</td><td>{value:.1%}</td></tr>"
+            for label, value in mapping.items()
+        )
+
+    chart = _fan_chart(price.dates, price.prices, ensemble, info.ticker)
+
+    return f"""
+<h2>Forward distribution — {horizon} trading days</h2>
+<div class="chart">{chart}</div>
+<div class="panel" style="margin-top:14px">
+<b>{html.escape(probabilities.direction_verdict)}</b><br><br>
+{html.escape(probabilities.risk_verdict)}
+</div>
+
+<h2>Probabilities that mean something</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+  <div>
+    <h3 style="font-size:13px;color:var(--muted)">Where it might finish</h3>
+    <table>{rows(probabilities.terminal_thresholds)}</table>
+  </div>
+  <div>
+    <h3 style="font-size:13px;color:var(--muted)">What it might touch on the way</h3>
+    <table>{rows(probabilities.touch_thresholds)}</table>
+  </div>
+  <div>
+    <h3 style="font-size:13px;color:var(--muted)">Drawdown within the period</h3>
+    <table>{rows(probabilities.drawdowns)}</table>
+  </div>
+</div>
+<p class="hint">Touching a level is always more likely than finishing beyond it —
+a path can dip and recover. The touch column is the one a stop-loss responds to.</p>
+
+<h2>Buying versus shorting — the same forecast, both sides</h2>
+<div class="scroll"><table>
+<tr><th>Measure</th><th>Long</th><th>Short</th></tr>
+<tr><td>probability of profit</td><td>{sides.long_probability_of_profit:.1%}</td>
+    <td>{sides.short_probability_of_profit:.1%}</td></tr>
+<tr><td>average of the worst 5%</td><td>{sides.long_expected_shortfall_95:.1%}</td>
+    <td>{sides.short_expected_shortfall_95:.1%}</td></tr>
+<tr><td>worst simulated outcome</td><td>{sides.long_worst_case:.1%}</td>
+    <td>{sides.short_worst_case:.1%}</td></tr>
+<tr><td>chance an {sides.stop_distance:.0%} stop is hit</td>
+    <td>{sides.long_stop_hit_probability:.1%}</td>
+    <td>{sides.short_stop_hit_probability:.1%}</td></tr>
+</table></div>
+<div class="panel" style="margin-top:12px">{html.escape(sides.asymmetry_verdict)}</div>
+
+<div class="panel" style="margin-top:14px">
+<b>How much to trust these.</b> They come from {ensemble.n_paths:,} simulated paths
+({html.escape(str(ensemble.assumptions.get("engine", "")))}), driftless by design —
+expected return cannot be estimated precisely enough over this horizon to justify
+tilting them. Calibration was tested on 20 years of SPY: probabilities of moderate
+events (a 5% drawdown in a month) came back <b>calibrated with positive skill</b>,
+while rare-event probabilities (a 10% drawdown in a month) were unbiased on average
+but carried <b>no skill over the base rate</b> — volatility clustering predicts
+ordinary moves, not crashes. Read the 5% rows with more confidence than the 20% rows.
+</div>
+"""
+
+
 def render_page(ticker: str) -> _Rendered:
     """Run the pipeline for one ticker and render it."""
     from quantos.data.market import MarketDataError, fetch_prices
@@ -326,6 +429,14 @@ def render_page(ticker: str) -> _Rendered:
             )
 
     vol_chart = _volatility_history(price.dates, price.prices, report)
+    try:
+        forward_html = _forecast_section(price, report, info)
+    except Exception:
+        traceback.print_exc()
+        forward_html = (
+            '<div class="panel err">The forward distribution could not be simulated '
+            "for this instrument; the historical analysis below is unaffected.</div>"
+        )
 
     forecast_html = f"""
 <h2>What can actually be forecast</h2>
@@ -416,6 +527,7 @@ signal is judged only after correcting for the fact that several were tried.
 <div class="cards">{cards}</div>
 <div class="chart" style="margin-top:18px">{price_chart}</div>
 {forecast_html}
+{forward_html}
 {factors_html}
 {signals_html}
 <h2>What the data supports</h2>

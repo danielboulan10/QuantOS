@@ -145,7 +145,7 @@ class Figure:
                 f'stroke-width="1"/>'
             )
             label = (
-                _format_year(float(value))
+                _format_year(float(value), self._x_range[1] - self._x_range[0])
                 if self.x_tick_style == "year"
                 else _format_tick(float(value))
             )
@@ -376,14 +376,22 @@ def _decimate_min_max(
     return x[index], y[index]
 
 
-def _format_year(value: float) -> str:
-    """Axis label for a calendar year.
+def _format_year(value: float, span: float = 10.0) -> str:
+    """Axis label for a calendar year, at a precision the span can support.
 
     Years are the one common axis where the default grouping is wrong: 2017
     formatted as a magnitude becomes "2,017", which reads as a quantity rather
-    than a date. Charts plotted against fractional years pass this instead.
+    than a date.
+
+    Rounding to whole years also breaks down on short spans -- a two-year chart
+    with six ticks printed "2025 2025 2026 2026 2027 2027", which looks like a
+    rendering fault. Below four years the label carries a quarter.
     """
-    return f"{value:.0f}"
+    if span >= 4.0:
+        return f"{value:.0f}"
+    year = int(np.floor(value))
+    quarter = int(np.floor((value - year) * 4)) + 1
+    return f"{year} Q{min(quarter, 4)}"
 
 
 def _format_tick(value: float) -> str:
@@ -440,6 +448,77 @@ def line_chart(
         figure.add_horizontal_line(0.0)
     for label, (x, y) in series.items():
         figure.add_line(x, y, label=label if len(series) > 1 else "")
+    return figure
+
+
+def fan_chart(
+    history_x: ArrayLike,
+    history_y: ArrayLike,
+    forecast_x: ArrayLike,
+    bands: Mapping[float, ArrayLike],
+    *,
+    title: str = "",
+    x_label: str = "",
+    y_label: str = "",
+    theme: Theme | None = None,
+    x_tick_style: str = "auto",
+) -> Figure:
+    """History followed by a shaded forecast distribution.
+
+    The bands are *pointwise* quantiles: the 5% edge is the 5th percentile at
+    each step separately, not a band a path stays inside with 95% probability. A
+    single path is far more likely to leave it somewhere along the way, which is
+    why path-dependent probabilities are computed from the simulated paths rather
+    than read off this picture.
+
+    Example
+        >>> import numpy as np
+        >>> h = np.arange(50.0)
+        >>> f = np.arange(50.0, 80.0)
+        >>> bands = {0.05: np.full(30, 90.0), 0.5: np.full(30, 100.0),
+        ...          0.95: np.full(30, 110.0)}
+        >>> svg = fan_chart(h, np.full(50, 100.0), f, bands).render()
+        >>> svg.startswith("<svg")
+        True
+    """
+    figure = Figure(
+        title=title,
+        x_label=x_label,
+        y_label=y_label,
+        theme=theme or Theme(),
+        x_tick_style=x_tick_style,
+    )
+    hx = np.asarray(history_x, dtype=float).ravel()
+    hy = np.asarray(history_y, dtype=float).ravel()
+    fx = np.asarray(forecast_x, dtype=float).ravel()
+    band_arrays = {float(k): np.asarray(v, dtype=float).ravel() for k, v in bands.items()}
+
+    all_y = np.concatenate([hy, *band_arrays.values()])
+    figure.set_ranges(np.concatenate([hx, fx]), all_y)
+    figure.add_grid()
+
+    # Shade symmetric quantile pairs from the outside in, so the centre is darkest.
+    levels = sorted(band_arrays)
+    pairs = [(lo, hi) for lo, hi in zip(levels, levels[::-1], strict=True) if lo < hi]
+    for index, (lower, upper) in enumerate(pairs):
+        low, high = band_arrays[lower], band_arrays[upper]
+        points = [
+            f"{figure._x(float(x)):.1f},{figure._y(float(y)):.1f}"
+            for x, y in zip(fx, low, strict=True)
+        ]
+        points += [
+            f"{figure._x(float(x)):.1f},{figure._y(float(y)):.1f}"
+            for x, y in zip(fx[::-1], high[::-1], strict=True)
+        ]
+        opacity = 0.14 + 0.12 * index
+        figure._elements.append(
+            f'<polygon points="{" ".join(points)}" fill="{figure.theme.palette[0]}" '
+            f'fill-opacity="{opacity:.2f}" stroke="none"/>'
+        )
+
+    if 0.5 in band_arrays:
+        figure.add_line(fx, band_arrays[0.5], label="median path")
+    figure.add_line(hx, hy, label="history")
     return figure
 
 

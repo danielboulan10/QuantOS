@@ -1266,7 +1266,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--range",
         default="10y",
-        choices=["1y", "2y", "5y", "10y", "max"],
+        choices=["1y", "2y", "5y", "10y", "20y"],
         help="how much history to request for --ticker",
     )
     p.add_argument("--refresh", action="store_true", help="ignore the cache and re-download")
