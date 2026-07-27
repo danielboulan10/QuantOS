@@ -1,0 +1,74 @@
+name: publish site
+
+# Builds the static research site and publishes it to GitHub Pages.
+#
+# Static rather than a running server, deliberately: the pages are expensive to
+# compute and identical for every visitor, and putting an undocumented upstream
+# data endpoint in the path of every page load is the fastest way to get
+# rate-limited into a broken site. Built once a day, served as files.
+# See docs/ddr/DDR-005-static-site.md.
+
+on:
+  schedule:
+    # 22:15 UTC on weekdays, after the US close and after the forward-testing job.
+    - cron: "15 22 * * 1-5"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/quantos/web/**"
+      - "src/quantos/forecast/**"
+      - "scripts/build_site.py"
+      - ".github/workflows/site.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build the site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -e .
+
+      - name: build
+        run: python scripts/build_site.py --out site
+
+      - name: the build must be substantial, not a stub
+        run: |
+          pages=$(ls site/*.html | wc -l)
+          echo "built ${pages} pages"
+          # A near-empty build usually means the data source refused us. Publishing
+          # it would silently replace a working site with a broken one.
+          test "$pages" -ge 10
+          test -f site/index.html
+          test -f site/methodology.html
+          # Check the exact phrase on the index *and* on a research page: a
+          # visitor usually lands on a research page directly and never sees the
+          # index, so a disclaimer only on the front page is absent when it counts.
+          grep -q "Nothing here is investment advice" site/index.html
+          grep -q "Nothing here is investment advice" site/SPY.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+
+  deploy:
+    name: deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -35,7 +35,27 @@ def test_the_landing_page_states_what_is_not_forecast():
     """The honesty of the framing is a feature and should not silently vanish."""
     page = render_landing()
     assert "Where the price is going" in page
-    assert "not investment advice" in page
+
+
+def test_every_page_carries_the_disclaimer():
+    """It must be on pages reached directly by link, not only on the index.
+
+    Most visitors arrive at a research page from a link or a shared URL and never
+    see the landing page, so a disclaimer that lives only there is missing exactly
+    when it matters.
+    """
+    from quantos.web.server import DISCLAIMER, render_page
+
+    assert "investment advice" in DISCLAIMER
+    assert DISCLAIMER in render_landing()
+
+    rendered = render_page("KO", link_style="static")
+    assert rendered.status == 200
+    assert "Nothing here is investment advice" in rendered.body
+
+
+def test_an_error_page_still_carries_the_disclaimer():
+    assert "investment advice" in render_landing("no such ticker")
 
 
 def _accepted(ticker: str) -> bool:

@@ -35,7 +35,20 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["render_landing", "render_page", "serve"]
+__all__ = ["DISCLAIMER", "render_landing", "render_page", "serve"]
+
+#: Shown on every page, not just the landing page.
+#:
+#: A visitor usually arrives at a research page directly -- from a link, a search
+#: result, or a shared URL -- and never sees the index. A disclaimer that lives
+#: only on the front page is therefore absent exactly when it matters.
+DISCLAIMER = (
+    "QuantOS is a research and education tool. Nothing here is investment advice, "
+    "a recommendation, or an offer to buy or sell any security. The figures are "
+    "statistical estimates from historical prices and simulated scenarios; they "
+    "describe distributions, not outcomes. Data is delayed and may be wrong. Past "
+    "behaviour does not determine future results, and you can lose money."
+)
 
 _STYLE = """
 :root {
@@ -91,7 +104,7 @@ footer { margin-top:44px; padding-top:18px; border-top:1px solid var(--line);
 """
 
 _SEARCH_FORM = """
-<form action="/research" method="get" autocomplete="off">
+<form action="{action}" method="get" autocomplete="off" onsubmit="{onsubmit}">
   <input type="text" name="ticker" placeholder="Ticker — AAPL, SPY, ^GSPC, BTC-USD, VOD.L"
          value="{value}" autofocus aria-label="Ticker symbol">
   <button type="submit">Research</button>
@@ -103,17 +116,44 @@ _SEARCH_FORM = """
   <code onclick="go('BTC-USD')">BTC-USD</code>
   <code onclick="go('VOD.L')">VOD.L</code>
   &nbsp;· no API key required · daily bars, delayed, total-return adjusted</p>
-<script>function go(t){location.href='/research?ticker='+encodeURIComponent(t);}</script>
+<script>{navigate}</script>
 """
 
 
-def _search_form(value: str = "") -> str:
-    """Render the search box.
+#: How links are formed. "dynamic" hits the running server; "static" points at
+#: pre-generated files, which is how the published site works -- see
+#: ``docs/ddr/DDR-005-static-site.md``.
+LinkStyle = str
+
+
+def _search_form(value: str = "", *, link_style: LinkStyle = "dynamic") -> str:
+    """Render the search box for the requested hosting mode.
 
     A plain ``replace`` rather than ``str.format``: the inline script contains
     braces, which ``format`` would try to read as replacement fields.
     """
-    return _SEARCH_FORM.replace("{value}", html.escape(value))
+    if link_style == "static":
+        # No server to query, so the form resolves the ticker client-side against
+        # the pre-generated universe and navigates to its page.
+        action = "#"
+        onsubmit = "return goStatic(this.ticker.value)"
+        navigate = (
+            "function goStatic(t){t=(t||'').trim().toUpperCase();"
+            "if(!t)return false;"
+            "location.href=encodeURIComponent(t)+'.html';return false;}"
+            "function go(t){goStatic(t);}"
+        )
+    else:
+        action = "/research"
+        onsubmit = "return true"
+        navigate = "function go(t){location.href='/research?ticker='+encodeURIComponent(t);}"
+
+    return (
+        _SEARCH_FORM.replace("{value}", html.escape(value))
+        .replace("{action}", action)
+        .replace("{onsubmit}", onsubmit)
+        .replace("{navigate}", navigate)
+    )
 
 
 def _pct(value: float | None, digits: int = 2) -> str:
@@ -142,7 +182,7 @@ class _Rendered:
     body: str
 
 
-def render_landing(message: str = "") -> str:
+def render_landing(message: str = "", *, link_style: LinkStyle = "dynamic") -> str:
     """The search page."""
     banner = (
         f'<div class="panel err" style="margin-bottom:20px">{html.escape(message)}</div>'
@@ -157,7 +197,7 @@ def render_landing(message: str = "") -> str:
 distribution, tail risk, GARCH volatility dynamics and forecast, regimes, factor
 exposures, and a pre-registered signal battery corrected for multiple testing.</p>
 {banner}
-{_search_form()}
+{_search_form(link_style=link_style)}
 <h2>What this answers well</h2>
 <div class="panel"><ul>
 <li><b>How risky is this, really?</b> Fat-tailed VaR and CVaR, not a Gaussian approximation.</li>
@@ -173,8 +213,8 @@ exposures, and a pre-registered signal battery corrected for multiple testing.</
     and this tool reports that rather than manufacturing a target.</li>
 <li>Anything not in the price: earnings quality, fundamentals, borrow, capacity.</li>
 </ul></div>
-<footer>Research tool, not investment advice. Data is delayed daily bars from a public
-endpoint. <a href="https://github.com/danielboulan10/QuantOS">Source</a>.</footer>
+<footer><b>{html.escape(DISCLAIMER)}</b><br><br>
+<a href="https://github.com/danielboulan10/QuantOS">Source</a></footer>
 </div></body></html>"""
 
 
@@ -347,7 +387,7 @@ ordinary moves, not crashes. Read the 5% rows with more confidence than the 20% 
 """
 
 
-def render_page(ticker: str) -> _Rendered:
+def render_page(ticker: str, *, link_style: LinkStyle = "dynamic") -> _Rendered:
     """Run the pipeline for one ticker and render it."""
     from quantos.data.market import MarketDataError, fetch_prices
     from quantos.research.instruments import AssetClass, Instrument
@@ -356,14 +396,15 @@ def render_page(ticker: str) -> _Rendered:
     try:
         price, info = fetch_prices(ticker, start="2015-01-01")
     except MarketDataError as error:
-        return _Rendered(404, render_landing(f"{ticker}: {error}"))
+        return _Rendered(404, render_landing(f"{ticker}: {error}", link_style=link_style))
 
     if len(price) < 260:
         return _Rendered(
             400,
             render_landing(
                 f"{info.ticker} has only {len(price)} daily bars; at least ~260 "
-                "are needed before these statistics mean anything."
+                "are needed before these statistics mean anything.",
+                link_style=link_style,
             ),
         )
 
@@ -514,6 +555,12 @@ signal is judged only after correcting for the fact that several were tried.
     )
 
     heading = html.escape(info.name or info.ticker)
+    home_link = "index.html" if link_style == "static" else "/"
+    methodology_link = (
+        "methodology.html"
+        if link_style == "static"
+        else "https://github.com/danielboulan10/QuantOS#readme"
+    )
     price_chart = _price_chart(price.dates, price.prices, info.ticker)
 
     body = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -523,7 +570,7 @@ signal is judged only after correcting for the fact that several were tried.
 <h1>{heading} <span class="mut">({html.escape(info.ticker)})</span></h1>
 <p class="sub">{html.escape(info.asset_class)} · {html.escape(info.exchange)} ·
 {len(price):,} daily bars, {price.start} to {price.end} · {html.escape(price.price_column)}</p>
-{_search_form(info.ticker)}
+{_search_form(info.ticker, link_style=link_style)}
 <div class="cards">{cards}</div>
 <div class="chart" style="margin-top:18px">{price_chart}</div>
 {forecast_html}
@@ -532,10 +579,12 @@ signal is judged only after correcting for the fact that several were tried.
 {signals_html}
 <h2>What the data supports</h2>
 <div class="panel"><ul>{notes or "<li>--</li>"}{skipped}</ul></div>
-<footer>Generated {report.generated} from {html.escape(price.source)}.
-Every number is descriptive of the past except the volatility forecast, which is
-explicitly labelled. Research tool, not investment advice.
-<a href="/">New search</a> ·
+<footer><b>{html.escape(DISCLAIMER)}</b><br><br>
+Generated {report.generated} from {html.escape(price.source)}. Every number is
+descriptive of the past except the forward distribution, which is explicitly
+labelled and calibration-tested.
+<a href="{home_link}">New search</a> ·
+<a href="{methodology_link}">Methodology</a> ·
 <a href="https://github.com/danielboulan10/QuantOS">Source</a></footer>
 </div></body></html>"""
     return _Rendered(200, body)
