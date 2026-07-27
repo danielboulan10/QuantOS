@@ -86,7 +86,7 @@ ten years of history, using unadjusted closes changes the answer:
 
 | | raw CAGR | adjusted CAGR |
 |---|---:|---:|
-| Verizon (VZ) | **−1.85%** | **+3.59%** |
+| Verizon (VZ) | **(1.85)%** | **3.59%** |
 | Exxon (XOM) | 5.48% | 10.17% |
 | Coca-Cola (KO) | 6.10% | 9.47% |
 | Berkshire (BRK-B) | 13.16% | 13.16% |
