@@ -38,6 +38,53 @@ def register(filename: str, title: str, caption: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
+def fig_forward_fan(out: Path) -> None:
+    """400 bars of simulated history, then the forward distribution.
+
+    The flagship figure: it shows what the forecast actually is -- a distribution,
+    not a path. Simulated rather than fetched so the gallery stays reproducible
+    offline and in CI.
+    """
+    from quantos.forecast.paths import simulate_garch_paths
+    from quantos.viz.svg import fan_chart
+
+    rng = SeedBank(root=21).child("gallery_forward_fan").generator()
+    # A GARCH process, so there is genuine clustering for the model to find.
+    omega, alpha, beta = 2e-6, 0.10, 0.87
+    variance = omega / (1 - alpha - beta)
+    returns = np.empty(1200)
+    for i in range(returns.size):
+        variance = omega + alpha * (returns[i - 1] ** 2 if i else 0.0) + beta * variance
+        returns[i] = np.sqrt(variance) * rng.standard_normal()
+    prices = 100 * np.exp(np.cumsum(returns))
+
+    ensemble = simulate_garch_paths(returns, float(prices[-1]), 160, n_paths=20_000)
+
+    history = prices[-400:]
+    hx = np.arange(-history.size, 0, dtype=float)
+    fx = np.arange(0, ensemble.horizon + 1, dtype=float)
+
+    figure = fan_chart(
+        hx,
+        history,
+        fx,
+        ensemble.quantile_bands((0.05, 0.25, 0.50, 0.75, 0.95)),
+        title="400 bars of history, 160 days simulated forward",
+        x_label="trading days from today",
+        y_label="price",
+    )
+    (out / "forward_fan.svg").write_text(figure.render())
+    register(
+        "forward_fan.svg",
+        "The forward distribution",
+        "20,000 paths from a fitted GARCH with fat-tailed innovations, shown as "
+        "quantile bands. The forecast is the spread, not a line: bands are 5/25/50/"
+        "75/95%. Driftless by design, because expected return cannot be estimated "
+        "over this horizon to any useful precision -- so the median sits flat and "
+        "the honest content is the width.",
+    )
+
+
 def fig_order_book(out: Path) -> None:
     """Cumulative depth from a real simulated book."""
     from quantos.core.types import Side
@@ -438,6 +485,7 @@ def fig_probability_convergence(out: Path) -> None:
 
 
 BUILDERS = [
+    fig_forward_fan,
     fig_order_book,
     fig_price_discovery,
     fig_return_distribution,

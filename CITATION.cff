@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+title: "QuantOS: a quantitative research platform built from first principles"
+message: "If you use this software or its results, please cite it."
+type: software
+authors:
+  - family-names: Boulan
+    given-names: Daniel
+repository-code: "https://github.com/danielboulan10/QuantOS"
+url: "https://danielboulan10.github.io/QuantOS/"
+abstract: >-
+  A quantitative research platform whose numerical core is implemented from first
+  principles with NumPy as its only runtime dependency: special functions,
+  statistical tests, optimisers, a limit order book with an optional C++ backend,
+  an agent-based market simulation, derivatives pricing and volatility surface
+  fitting, microstructure estimators, and simulated forward distributions whose
+  probabilities are calibration-tested. Validation is adversarial by design --
+  deflated Sharpe ratios, purged cross-validation, probability of backtest
+  overfitting, and an append-only forward-testing ledger that records predictions
+  before their outcomes exist.
+keywords:
+  - quantitative-finance
+  - market-microstructure
+  - limit-order-book
+  - volatility-forecasting
+  - backtest-overfitting
+  - numerical-methods
+license: MIT

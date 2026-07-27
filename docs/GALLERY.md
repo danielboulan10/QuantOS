@@ -8,6 +8,14 @@ NumPy-only runtime rule in [DDR-002](ddr/DDR-002-numpy-only-runtime.md).
 
 ---
 
+## The forward distribution
+
+![The forward distribution](gallery/forward_fan.svg)
+
+20,000 paths from a fitted GARCH with fat-tailed innovations, shown as quantile bands. The forecast is the spread, not a line: bands are 5/25/50/75/95%. Driftless by design, because expected return cannot be estimated over this horizon to any useful precision -- so the median sits flat and the honest content is the width.
+
+---
+
 ## Order book depth
 
 ![Order book depth](gallery/order_book_depth.svg)

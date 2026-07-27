@@ -1,9 +1,26 @@
 # QuantOS
 
+[![CI](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml/badge.svg)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
+[![site](https://github.com/danielboulan10/QuantOS/actions/workflows/site.yml/badge.svg)](https://danielboulan10.github.io/QuantOS/)
+[![forward testing](https://github.com/danielboulan10/QuantOS/actions/workflows/forward.yml/badge.svg)](forward/RECORD.md)
+[![tests](https://img.shields.io/badge/tests-750%20passing-brightgreen)](tests/)
+[![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
+[![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-blue)](pyproject.toml)
+[![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+
+### → **[Try it: danielboulan10.github.io/QuantOS](https://danielboulan10.github.io/QuantOS/)**
+
 **Type a ticker. Get a full quantitative research report.**
 
+![The forward distribution](docs/gallery/forward_fan.svg)
+
+*400 bars of history, then 20,000 simulated forward paths shown as quantile bands.
+The forecast is the spread, not a line — and the median sits flat because expected
+return cannot be estimated over this horizon to any useful precision. Saying so is
+the point.*
+
 ```bash
-quantos serve            # a search bar in your browser
+quantos serve                      # a search bar in your browser
 quantos research --ticker NVDA     # or straight from the terminal
 ```
 
