@@ -191,7 +191,7 @@ def render_landing(message: str = "", *, link_style: LinkStyle = "dynamic") -> s
     )
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QuantOS — quantitative research</title><style>{_STYLE}</style></head><body><div class="wrap">
+<title>QuantOS</title><style>{_STYLE}</style></head><body><div class="wrap">
 <h1>QuantOS</h1>
 <p class="sub">Type a ticker. Get the full quantitative research report — return
 distribution, tail risk, GARCH volatility dynamics and forecast, regimes, factor
@@ -565,7 +565,7 @@ signal is judged only after correcting for the fact that several were tried.
 
     body = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{html.escape(info.ticker)} — QuantOS</title><style>{_STYLE}</style></head>
+<title>QuantOS — {html.escape(info.ticker)}</title><style>{_STYLE}</style></head>
 <body><div class="wrap">
 <h1>{heading} <span class="mut">({html.escape(info.ticker)})</span></h1>
 <p class="sub">{html.escape(info.asset_class)} · {html.escape(info.exchange)} ·

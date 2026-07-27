@@ -204,7 +204,7 @@ function filterRows(q) {{
   document.getElementById('empty').style.display = shown ? 'none' : '';
 }}
 </script>"""
-    return _shell("QuantOS — quantitative research", body, style=style)
+    return _shell("QuantOS", body, style=style)
 
 
 def build_methodology(style: str) -> str:
@@ -298,7 +298,7 @@ with overlapping forecasts discounted to their independent count.
 <footer><b>{DISCLAIMER}</b><br><br>
 <a href="index.html">Back to search</a> ·
 <a href="https://github.com/danielboulan10/QuantOS">Source</a></footer>"""
-    return _shell("Methodology — QuantOS", body, style=style)
+    return _shell("QuantOS — Methodology", body, style=style)
 
 
 EXTRA_STYLE = """
@@ -357,7 +357,7 @@ self.addEventListener('fetch', (event) => {
 def manifest() -> str:
     return json.dumps(
         {
-            "name": "QuantOS — quantitative research",
+            "name": "QuantOS",
             "short_name": "QuantOS",
             "description": "Quantitative research on any listed security.",
             "start_url": "index.html",
