@@ -445,6 +445,9 @@ Read in this order if you want the argument rather than the API.
 | [`execution/almgren_chriss.py`](src/quantos/execution/almgren_chriss.py) | Optimal execution frontier, square-root impact law and a test of its exponent. |
 | [`probability/problems.py`](src/quantos/probability/problems.py) | Ten classic problems, each solved analytically *and* by simulation, required to agree. |
 | [`data/`](src/quantos/data) | Keyless FRED client with disk caching, CSV loader for stocks/ETFs, series catalogue, and the analysis pipeline. |
+| [`forecast/`](src/quantos/forecast) | Simulated forward distributions, the probabilities they imply, and the calibration test that decides whether those probabilities are true. |
+| [`models/`](src/quantos/models) | A NumPy attention model with hand-derived gradients, and the baselines it is measured against. It loses to GARCH; see [the leaderboard](docs/MODEL_LEADERBOARD.md). |
+| [`web/server.py`](src/quantos/web/server.py) · [`scripts/build_site.py`](scripts/build_site.py) | The search bar, and the static site generated from it daily. Stdlib only, so DDR-002 holds. |
 | [`live/ledger.py`](src/quantos/live/ledger.py) | Append-only forward-testing ledger, hash-chained. The only validation here that needs no correction. |
 | [`research/vol_surface.py`](src/quantos/research/vol_surface.py) | SVI smile fitting with butterfly and calendar arbitrage checks; model-free implied variance and the variance risk premium. |
 | [`research/intraday.py`](src/quantos/research/intraday.py) | Realised variance, bipower variation, two-scale (ZMA), jump testing, signature plots, the Epps effect. |
@@ -628,6 +631,8 @@ Empirical size is now 2.7%.
 - [`docs/ddr/`](docs/ddr) — Design Decision Records: the choice, the alternatives
   considered, the trade-off accepted, and what would change the decision.
 - [`docs/MATH.md`](docs/MATH.md) — derivations for the non-obvious formulas.
+- [`docs/MODEL_LEADERBOARD.md`](docs/MODEL_LEADERBOARD.md) — every volatility
+  forecaster on one walk-forward split, including the neural model that loses.
 
 ## License
 
