@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 
 from quantos.data.loader import PriceSeries
-from quantos.live.ledger import Ledger, Prediction, Settlement
+from quantos.live.ledger import Ledger, LedgerError, Prediction, Settlement
 from quantos.research.signals import SIGNALS
 
 if TYPE_CHECKING:
@@ -47,6 +47,19 @@ __all__ = ["prediction_id_for", "propose", "run_daily", "settle"]
 
 #: Horizon in calendar days. 21 trading days is about 30 calendar days.
 DEFAULT_HORIZON_DAYS = 30
+
+#: Minimum days between successive predictions for the same (symbol, signal).
+#:
+#: Set to the horizon so that consecutive predictions for one signal do not
+#: overlap at all. Recording daily instead would produce forecasts sharing 29 of
+#: their 30 days, which adds almost no information while inflating the apparent
+#: sample size by 30x -- and an interval computed on the inflated count reports
+#: noise as skill. See ``Ledger.independent_subset``.
+#:
+#: The daily job still *runs* daily. It simply declines to record a signal that
+#: already has a live forecast, which also makes the schedule robust: a missed
+#: day is picked up by the next run rather than losing that observation.
+DEFAULT_MIN_SPACING_DAYS = DEFAULT_HORIZON_DAYS
 
 
 def prediction_id_for(symbol: str, signal: str, as_of: str, horizon_days: int) -> str:
@@ -181,28 +194,52 @@ def run_daily(
     series: PriceSeries,
     *,
     horizon_days: int = DEFAULT_HORIZON_DAYS,
+    min_spacing_days: int = DEFAULT_MIN_SPACING_DAYS,
     as_of: date | None = None,
 ) -> dict[str, Any]:
     """One full cycle: settle what is due, then record today's forecasts.
 
-    Settlement runs *first* so that a prediction made today can never be settled
-    by today's own price.
+    Settlement runs *first*, so a prediction made today can never be settled by
+    today's own price.
+
+    A signal is recorded only if its previous forecast for this symbol is at
+    least ``min_spacing_days`` old. That keeps successive predictions
+    non-overlapping without making the schedule fragile -- the job can run every
+    day, and a day it misses costs nothing.
     """
     settlements = settle(ledger, series, as_of=as_of)
 
-    recorded, skipped = [], []
+    decision_date = date.fromisoformat(_last_date_string(series))
+    last_recorded: dict[str, date] = {}
+    for existing in ledger.predictions():
+        if existing.symbol != series.symbol:
+            continue
+        stamp = date.fromisoformat(existing.as_of)
+        if stamp > last_recorded.get(existing.signal, date.min):
+            last_recorded[existing.signal] = stamp
+
+    recorded: list[Prediction] = []
+    duplicates: list[str] = []
+    too_soon: list[str] = []
+
     for prediction in propose(series, horizon_days=horizon_days):
+        previous = last_recorded.get(prediction.signal)
+        if previous is not None and (decision_date - previous).days < min_spacing_days:
+            too_soon.append(prediction.signal)
+            continue
         try:
             ledger.record_prediction(prediction)
             recorded.append(prediction)
-        except Exception:  # already recorded for this (symbol, signal, date)
-            skipped.append(prediction.signal)
+        except LedgerError:  # already recorded for this (symbol, signal, date)
+            duplicates.append(prediction.signal)
 
     return {
         "symbol": series.symbol,
+        "as_of": str(decision_date),
         "settled": len(settlements),
         "recorded": len(recorded),
-        "already_present": len(skipped),
+        "already_present": len(duplicates),
+        "still_live": len(too_soon),
         "open_after": len(ledger.open_predictions()),
         "chain_valid": ledger.verify_chain(),
     }

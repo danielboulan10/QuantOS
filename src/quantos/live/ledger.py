@@ -269,6 +269,42 @@ class Ledger:
             previous = record["hash"]
         return True
 
+    # -- overlap ------------------------------------------------------------ #
+    @staticmethod
+    def independent_subset(predictions: list[Prediction]) -> list[Prediction]:
+        r"""A maximal set of predictions whose holding periods do not overlap.
+
+        Why this is necessary
+            A 30-day forecast recorded every day produces predictions that share
+            29 of their 30 days. Consecutive outcomes are then almost the same
+            random variable, and treating them as independent observations
+            overstates the sample size by roughly the horizon -- a year of daily
+            records looks like 250 observations when it carries the information of
+            about eight.
+
+            That error runs in the dangerous direction. A confidence interval
+            computed on 250 is about five times too narrow, so ordinary noise
+            clears the significance threshold and the ledger reports skill that
+            is not there. Since the entire purpose of forward testing is to be
+            the one measurement that cannot flatter itself, this has to be
+            handled rather than noted.
+
+        Method
+            Greedy interval scheduling by due date, which is optimal for this
+            problem: take the earliest-finishing prediction, discard everything
+            that overlaps it, repeat. The result is an exactly independent
+            subset, and its size is the effective sample size.
+        """
+        ordered = sorted(predictions, key=lambda p: (p.due_on(), p.as_of))
+        chosen: list[Prediction] = []
+        free_from: date | None = None
+        for prediction in ordered:
+            starts = date.fromisoformat(prediction.as_of)
+            if free_from is None or starts >= free_from:
+                chosen.append(prediction)
+                free_from = prediction.due_on()
+        return chosen
+
     # -- scoring ----------------------------------------------------------- #
     def score(self, *, signal: str | None = None, symbol: str | None = None) -> dict[str, Any]:
         """Score every settled prediction.
@@ -290,6 +326,8 @@ class Ledger:
             predictions = {k: v for k, v in predictions.items() if v.symbol == symbol}
 
         returns: list[float] = []
+        settled_predictions: list[Prediction] = []
+        scored_ids: set[str] = set()
         for settlement in self.settlements():
             prediction = predictions.get(settlement.prediction_id)
             if prediction is None:
@@ -297,6 +335,8 @@ class Ledger:
             realised = settlement.realised_return(prediction.entry_price, prediction.direction)
             if np.isfinite(realised):
                 returns.append(realised)
+                settled_predictions.append(prediction)
+                scored_ids.add(prediction.prediction_id)
 
         n_open = len([p for p in self.open_predictions() if p.prediction_id in predictions])
         if not returns:
@@ -313,20 +353,31 @@ class Ledger:
         hits = int(np.sum(values > 0))
         hit_rate = hits / values.size
 
+        # The point estimate uses every settled prediction, because more data
+        # still reduces its variance. The *interval* uses the independent subset,
+        # because overlapping holding periods carry far less information than
+        # their count suggests -- see `independent_subset`.
+        independent = self.independent_subset(
+            [p for p in settled_predictions if p.prediction_id in scored_ids]
+        )
+        effective = max(1, len(independent))
+
         # Wilson interval: correct for small n, unlike the normal approximation,
         # which can produce a lower bound below zero on a handful of trials.
         z = float(ndtri(np.array(0.975)))
-        denominator = 1.0 + z * z / values.size
-        centre = (hit_rate + z * z / (2 * values.size)) / denominator
+        denominator = 1.0 + z * z / effective
+        centre = (hit_rate + z * z / (2 * effective)) / denominator
         spread = (
             z
-            * np.sqrt(hit_rate * (1 - hit_rate) / values.size + z * z / (4 * values.size**2))
+            * np.sqrt(hit_rate * (1 - hit_rate) / effective + z * z / (4 * effective**2))
             / denominator
         )
 
         return {
             "n_predictions": len(predictions),
             "n_settled": int(values.size),
+            "n_effective": effective,
+            "overlap_factor": float(values.size / effective),
             "n_open": n_open,
             "hit_rate": hit_rate,
             "hit_rate_95_low": float(max(0.0, centre - spread)),
@@ -338,3 +389,71 @@ class Ledger:
             "worst": float(np.min(values)),
             "hit_rate_beats_coin_flip": bool(max(0.0, centre - spread) > 0.5),
         }
+
+    def duplicate_signal_groups(self) -> list[list[str]]:
+        r"""Signals whose recorded *directions* are identical on every shared day.
+
+        Why this is checked rather than assumed
+            Only the sign of each signal's position is recorded, so two signals
+            that differ solely in *sizing* become the same prediction. Measured
+            on this ledger's own records, ``vol_scaled_momentum`` and
+            ``momentum_252d`` coincide on 100% of days: volatility scaling changes
+            the size of the bet, not its direction, and the size is not what gets
+            scored.
+
+            Left undetected that is doubly misleading. It overstates how many
+            independent ideas are being tested, which makes the
+            multiple-comparison correction too lenient. And if the duplicated
+            pair happens to look good, it appears twice in the table, which reads
+            as two signals agreeing when it is one signal counted twice.
+
+        Returns groups of two or more names; singletons are omitted.
+        """
+        by_signal: dict[str, dict[tuple[str, str], int]] = {}
+        for prediction in self.predictions():
+            key = (prediction.symbol, prediction.as_of)
+            by_signal.setdefault(prediction.signal, {})[key] = prediction.direction
+
+        names = sorted(by_signal)
+        assigned: dict[str, int] = {}
+        groups: list[list[str]] = []
+
+        for index, first in enumerate(names):
+            if first in assigned:
+                continue
+            group = [first]
+            for second in names[index + 1 :]:
+                if second in assigned:
+                    continue
+                shared = set(by_signal[first]) & set(by_signal[second])
+                if len(shared) < 5:
+                    continue
+                if all(by_signal[first][k] == by_signal[second][k] for k in shared):
+                    group.append(second)
+            if len(group) > 1:
+                for name in group:
+                    assigned[name] = len(groups)
+                groups.append(group)
+        return groups
+
+    def distinct_signal_count(self) -> int:
+        """Number of directionally distinct signals, for a correct correction."""
+        names = {p.signal for p in self.predictions()}
+        duplicated = sum(len(g) - 1 for g in self.duplicate_signal_groups())
+        return max(0, len(names) - duplicated)
+
+    def score_by_signal(self) -> list[dict[str, Any]]:
+        """Score each signal separately, worst-case-corrected for the count.
+
+        Nine signals are recorded, so the best of nine will look good by chance.
+        The Bonferroni-adjusted threshold is reported alongside each so a reader
+        can see the correction rather than take the raw best.
+        """
+        names = sorted({p.signal for p in self.predictions()})
+        rows: list[dict[str, Any]] = []
+        for name in names:
+            scored = self.score(signal=name)
+            scored["signal"] = name
+            scored["n_signals_tried"] = len(names)
+            rows.append(scored)
+        return sorted(rows, key=lambda r: (-(r.get("n_settled") or 0), -(r.get("hit_rate") or 0.0)))

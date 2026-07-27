@@ -9,6 +9,7 @@ failure this module exists to make impossible.
 
 from __future__ import annotations
 
+import itertools
 import json
 from datetime import date, timedelta
 
@@ -174,14 +175,86 @@ def test_prediction_ids_are_deterministic():
 
 
 def test_running_twice_in_one_day_records_nothing_new(ledger):
+    """Re-running is a no-op, and the reason is that the forecasts are still live."""
     series = make_series()
     first = run_daily(ledger, series)
     second = run_daily(ledger, series)
 
     assert first["recorded"] == 9
     assert second["recorded"] == 0
-    assert second["already_present"] == 9
+    assert second["still_live"] == 9
     assert len(ledger.predictions()) == 9
+
+
+def test_a_signal_is_not_re_predicted_while_its_forecast_is_live(ledger):
+    """The overlap guard: no new forecast until the previous one has matured.
+
+    Recording a 30-day view every day would produce predictions sharing 29 of
+    their 30 days, which adds almost no information but multiplies the apparent
+    sample size -- and an interval computed on the inflated count reports noise
+    as skill.
+    """
+    prices = make_series(n=900).prices
+    dates = np.datetime64("2023-01-01") + np.arange(900)
+
+    for cut in range(400, 900, 5):  # attempt to record every 5 days
+        window = PriceSeries(symbol="TEST", dates=dates[:cut], prices=prices[:cut])
+        run_daily(ledger, window, as_of=dates[cut - 1].astype(date))
+
+    per_signal: dict[str, list[date]] = {}
+    for prediction in ledger.predictions():
+        per_signal.setdefault(prediction.signal, []).append(date.fromisoformat(prediction.as_of))
+
+    assert per_signal, "no predictions were recorded at all"
+    for signal, stamps in per_signal.items():
+        stamps.sort()
+        gaps = [(b - a).days for a, b in itertools.pairwise(stamps)]
+        if gaps:
+            assert min(gaps) >= 30, f"{signal} re-predicted after only {min(gaps)} days"
+
+
+def test_effective_sample_size_discounts_overlapping_predictions(ledger):
+    """Overlapping forecasts must not be counted as independent observations."""
+    # Ten forecasts, each recorded a day apart, all with a 30-day horizon: they
+    # overlap almost completely, so at most one is independent.
+    for i in range(10):
+        as_of = date(2025, 1, 1) + timedelta(days=i)
+        ledger.record_prediction(Prediction(f"p{i}", "A", "s", 1, 30, 100.0, as_of=str(as_of)))
+        ledger.record_settlement(Settlement(f"p{i}", 110.0))
+
+    scored = ledger.score()
+    assert scored["n_settled"] == 10
+    assert scored["n_effective"] == 1
+    assert scored["overlap_factor"] == pytest.approx(10.0)
+    # With one independent observation, ten wins prove nothing.
+    assert scored["hit_rate"] == 1.0
+    assert scored["hit_rate_beats_coin_flip"] is False
+
+
+def test_non_overlapping_predictions_all_count(ledger):
+    """Guards the test above: spaced forecasts must not be discounted."""
+    for i in range(10):
+        as_of = date(2025, 1, 1) + timedelta(days=40 * i)
+        ledger.record_prediction(Prediction(f"p{i}", "A", "s", 1, 30, 100.0, as_of=str(as_of)))
+        ledger.record_settlement(Settlement(f"p{i}", 110.0))
+
+    scored = ledger.score()
+    assert scored["n_effective"] == 10
+    assert scored["overlap_factor"] == pytest.approx(1.0)
+
+
+def test_independent_subset_is_actually_independent(ledger):
+    """Every pair in the chosen subset must have disjoint holding periods."""
+    rng = np.random.default_rng(5)
+    for i in range(60):
+        as_of = date(2025, 1, 1) + timedelta(days=int(rng.integers(0, 400)))
+        ledger.record_prediction(Prediction(f"p{i}", "A", "s", 1, 30, 100.0, as_of=str(as_of)))
+
+    chosen = ledger.independent_subset(ledger.predictions())
+    assert len(chosen) > 1, "the subset should contain several spaced predictions"
+    spans = sorted((date.fromisoformat(p.as_of), p.due_on()) for p in chosen)
+    for (_, first_end), (second_start, _) in itertools.pairwise(spans):
+        assert second_start >= first_end
 
 
 def test_predictions_are_dated_from_the_data_not_from_today():

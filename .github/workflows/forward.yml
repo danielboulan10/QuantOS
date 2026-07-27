@@ -1,0 +1,101 @@
+name: forward testing
+
+# Records predictions before their outcomes exist, and settles the ones whose
+# horizon has elapsed.
+#
+# Running this in CI rather than on a laptop is the point. The hash chain in
+# forward/ledger.jsonl proves no record was edited in place, but it cannot prove
+# *when* a line was written -- a chain can be rebuilt from scratch. The commit
+# this job pushes supplies the missing half: an independently timestamped record
+# of when each prediction appeared, which cannot be backdated without rewriting
+# public history.
+#
+# Together they support the only claim that matters here: these forecasts were
+# written down before anyone knew how they turned out.
+
+on:
+  schedule:
+    # 21:30 UTC on weekdays: after the US close (20:00/21:00 UTC depending on
+    # daylight saving) so the day's bar exists, and early enough that a failure
+    # leaves room for the next day's run to pick the work up. Weekend runs are
+    # skipped because the guard below would record nothing anyway.
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch: # so it can be run by hand without waiting for the schedule
+
+permissions:
+  contents: write
+
+concurrency:
+  # Two cycles writing the ledger at once would interleave appends. Never cancel
+  # a run in progress: it may be part-way through recording.
+  group: forward-testing
+  cancel-in-progress: false
+
+jobs:
+  cycle:
+    name: record and settle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -e .
+
+      - name: verify the existing chain before appending to it
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from quantos.live.ledger import Ledger
+          path = Path("forward/ledger.jsonl")
+          if not path.exists():
+              print("no ledger yet; this run will create it")
+          else:
+              ledger = Ledger(path)
+              ledger.verify_chain()
+              print(f"chain intact over {len(ledger.read_all())} records")
+          PY
+
+      - name: run the cycle
+        run: python scripts/forward_daily.py
+
+      - name: verify the chain again, and that nothing was rewritten
+        run: |
+          python - <<'PY'
+          from quantos.live.ledger import Ledger
+          ledger = Ledger("forward/ledger.jsonl")
+          ledger.verify_chain()
+          scored = ledger.score()
+          print(f"chain intact; {scored.get('n_predictions', 0)} predictions, "
+                f"{scored.get('n_settled', 0)} settled, {scored.get('n_open', 0)} open")
+          PY
+          # An append-only file must only ever grow. A diff that removes lines
+          # means something rewrote history, and that must fail the run rather
+          # than be committed.
+          removed=$(git diff --numstat -- forward/ledger.jsonl | awk '{print $2}')
+          if [ -n "$removed" ] && [ "$removed" -ne 0 ]; then
+            echo "::error::${removed} lines were removed from an append-only ledger"
+            git diff -- forward/ledger.jsonl | head -40
+            exit 1
+          fi
+
+      - name: commit the day's records
+        run: |
+          if git diff --quiet -- forward/; then
+            echo "nothing changed today"
+            exit 0
+          fi
+          git config user.name "Daniel Boulan"
+          git config user.email "danielboulan10@gmail.com"
+          git add forward/
+          added=$(git diff --cached --numstat -- forward/ledger.jsonl | awk '{print $1}')
+          git commit -m "Forward record: $(date -u +%Y-%m-%d) (${added:-0} new)"
+          # The scheduled job and a human can both push; rebase rather than fail.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push rejected, rebasing (attempt ${attempt})"
+            git pull --rebase --autostash origin main || true
+          done
+          echo "::error::could not push after three attempts"
+          exit 1
