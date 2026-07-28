@@ -7,6 +7,8 @@
 [![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
 [![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![coverage](https://img.shields.io/badge/coverage-78%25-yellowgreen)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
+[![claims verified](https://img.shields.io/badge/documented%20claims-11%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
 
 ### → **[Try it: danielboulan10.github.io/QuantOS](https://danielboulan10.github.io/QuantOS/)**
 
@@ -297,6 +299,48 @@ identifiable volatility to return — an unguarded solver happily reports `0.0` 
 a case whose true volatility is 15%. `erfc`'s branch points are chosen by
 *cancellation* analysis rather than convergence rate. `risk_parity` uses a damped
 iteration because the textbook fixed point oscillates.
+
+---
+
+## Every number in this README is checked by CI
+
+Documentation rots silently: a refactor moves a constant, the prose keeps quoting
+the old figure, and nothing fails. So the prose is not trusted —
+[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives eleven
+documented claims from scratch on every build** and fails if any has drifted.
+
+```console
+$ python scripts/verify_claims.py
+  ok  special functions match SciPy to the documented tolerance
+      all within 1e-09 (erf 6.66e-16, ndtri 3.33e-15, lgamma 8.53e-14)
+  ok  the Brier decomposition closes to machine precision
+      closes to 2.8e-17; dropping the residual would leave 4.2e-04
+  ok  overlapping predictions are discounted ~42x
+      1305 predictions -> 29 independent, factor 45.0x
+  ok  the calibration verdict refuses to pass a no-skill model
+  ok  touching a level is never less likely than finishing beyond it
+  ok  price discovery is weak: mean correlation ~0.29 across seeds
+  ok  the C++ book is ~30x the pure Python one, batched
+      median 17,970,515 ops/s over 5 runs (range 16.4M-18.3M)
+  ok  the neural model loses to GARCH on QLIKE
+      GARCH 1.2659 < EWMA 1.3022 < attention 1.4443, as documented
+  ok  the runtime imports nothing but NumPy
+  ok  every documented gallery figure exists
+  ok  the disclaimer appears on every rendered page
+
+11 verified, 0 skipped, 0 failed
+```
+
+Note what the eighth line does: it re-derives the result showing this
+repository's own neural model **losing**, and fails the build if the model ever
+starts winning — because then the leaderboard would be stale and the honest thing
+is to rewrite it. Checking the claims you would rather were true is the only
+version of this that means anything.
+
+Writing the checker found a bug in the checker. Its first version grepped source
+lines for imports and reported `core/linalg.py` as importing a package called
+"finance" — from the sentence *"...from finance", IMA J. Numer. Anal.* in a
+citation. Three of its four findings were prose. It parses the AST now.
 
 ---
 

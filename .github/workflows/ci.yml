@@ -170,6 +170,26 @@ jobs:
           assert result.operations_per_second > 1e6, "batched replay lost an order of magnitude"
           PY
 
+  claims:
+    # Every headline number in the documentation is re-derived here. Prose rots
+    # silently -- a refactor moves a constant, the README keeps quoting the old
+    # figure, and nothing fails. This makes that failure loud.
+    #
+    # It also guards against the specific mistake this project has made: quoting a
+    # single favourable run. The price-discovery correlation was once reported as
+    # 0.78 (best of three seeds; the truth was 0.29 over sixteen) and the C++
+    # throughput as a six-digit number from one run of a range spanning 2x.
+    name: documented claims still hold
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -e ".[test]"
+      - name: build the C++ book so its throughput claim is checked too
+        run: python scripts/build_extension.py || true
+      - run: python scripts/verify_claims.py
+
   gallery:
     # The gallery must stay regenerable: a figure that only exists because it was
     # committed once is a figure that will silently go stale.
