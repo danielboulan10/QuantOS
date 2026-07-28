@@ -3,7 +3,8 @@
 [![CI](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml/badge.svg)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
 [![site](https://github.com/danielboulan10/QuantOS/actions/workflows/site.yml/badge.svg)](https://danielboulan10.github.io/QuantOS/)
 [![forward testing](https://github.com/danielboulan10/QuantOS/actions/workflows/forward.yml/badge.svg)](forward/RECORD.md)
-[![tests](https://img.shields.io/badge/tests-750%20passing-brightgreen)](tests/)
+[![tests](https://img.shields.io/badge/tests-817%20passing-brightgreen)](tests/)
+[![mutation score](https://img.shields.io/badge/mutation%20score-50%25-orange)](docs/TEST_QUALITY.md)
 [![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
 [![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
@@ -507,6 +508,8 @@ Read in this order if you want the argument rather than the API.
 | [`probability/problems.py`](src/quantos/probability/problems.py) | Ten classic problems, each solved analytically *and* by simulation, required to agree. |
 | [`data/`](src/quantos/data) | Keyless FRED client with disk caching, CSV loader for stocks/ETFs, series catalogue, and the analysis pipeline. |
 | [`forecast/`](src/quantos/forecast) | Simulated forward distributions, the probabilities they imply, and the calibration test that decides whether those probabilities are true. |
+| [`derivatives/market_making.py`](src/quantos/derivatives/market_making.py) | Options maker quoting from the SVI surface, inventory in Greek space, P&L split into spread capture, gamma/theta and adverse selection. |
+| [`execution/backtest.py`](src/quantos/execution/backtest.py) | Routes Almgren-Chriss schedules through the real matching engine. Finds a case where the model misranks strategies, and localises which assumption breaks. |
 | [`models/`](src/quantos/models) | A NumPy attention model with hand-derived gradients, and the baselines it is measured against. It loses to GARCH; see [the leaderboard](docs/MODEL_LEADERBOARD.md). |
 | [`web/server.py`](src/quantos/web/server.py) · [`scripts/build_site.py`](scripts/build_site.py) | The search bar, and the static site generated from it daily. Stdlib only, so DDR-002 holds. |
 | [`live/ledger.py`](src/quantos/live/ledger.py) | Append-only forward-testing ledger, hash-chained. The only validation here that needs no correction. |
@@ -694,6 +697,9 @@ Empirical size is now 2.7%.
 - [`docs/MATH.md`](docs/MATH.md) — derivations for the non-obvious formulas.
 - [`docs/MODEL_LEADERBOARD.md`](docs/MODEL_LEADERBOARD.md) — every volatility
   forecaster on one walk-forward split, including the neural model that loses.
+- [`docs/TEST_QUALITY.md`](docs/TEST_QUALITY.md) — mutation testing. Coverage says
+  lines ran; this says whether a bug would be caught. It found a module scoring
+  **0%**.
 
 ## License
 
