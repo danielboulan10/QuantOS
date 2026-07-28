@@ -268,7 +268,7 @@ def heston_price(
     log_moneyness = np.log(forward / strike)
 
     nodes, weights = _gauss_legendre(n_nodes, 1e-10, upper_limit)
-    shifted = nodes - 0.5j
+    shifted = np.asarray(nodes - 0.5j, dtype=np.complex128)
     phi = characteristic_function(
         shifted, parameters, time_to_expiry, rate=0.0, formulation=formulation
     )
