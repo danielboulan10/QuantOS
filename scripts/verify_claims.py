@@ -359,6 +359,101 @@ def _model_leaderboard() -> tuple[bool, str]:
 # --------------------------------------------------------------------------- #
 # Structural claims
 # --------------------------------------------------------------------------- #
+@claim("Heston reproduces Black-Scholes as vol-of-vol vanishes", "derivatives/heston.py")
+def _heston_bs_limit() -> tuple[bool, str]:
+    """With deterministic variance the model must collapse to the closed form."""
+    from quantos.derivatives.black_scholes import black_scholes_price
+    from quantos.derivatives.heston import HestonParameters, heston_price
+
+    volatility = 0.2
+    parameters = HestonParameters(
+        kappa=2.0, theta=volatility**2, xi=1e-4, rho=0.0, v0=volatility**2
+    )
+    worst = 0.0
+    for strike in (80.0, 100.0, 120.0):
+        heston = heston_price(100.0, strike, 1.0, parameters, rate=0.03)
+        black = float(black_scholes_price(100.0, strike, 1.0, volatility, rate=0.03))
+        worst = max(worst, abs(heston - black))
+    if worst > 1e-5:
+        return False, f"worst disagreement {worst:.2e}"
+    return True, f"agrees to {worst:.1e} across strikes"
+
+
+@claim("the Heston branch cut still bites the original formulation", "derivatives/heston.py")
+def _heston_branch_cut() -> tuple[bool, str]:
+    """The documented failure must remain demonstrable.
+
+    If a future change made the two formulations agree, the module's central
+    warning would be stale and should be rewritten rather than left standing.
+    """
+    from quantos.derivatives.heston import HestonParameters, heston_price
+
+    parameters = HestonParameters(kappa=8.0, theta=0.09, xi=1.0, rho=-0.8, v0=0.09)
+    with np.errstate(over="ignore", invalid="ignore"):
+        stable = heston_price(100.0, 100.0, 5.0, parameters, formulation="stable")
+        original = heston_price(100.0, 100.0, 5.0, parameters, formulation="original")
+
+    if not np.isfinite(stable):
+        return False, "the stable formulation itself failed"
+    if original <= 1.5 * stable:
+        return False, (
+            f"the formulations now agree ({original:.4f} vs {stable:.4f}); the branch-cut "
+            "warning in the docstring is stale"
+        )
+    ratio = original / stable
+    return True, f"original overprices by {ratio:.2f}x at T=5 ({original:.2f} vs {stable:.2f})"
+
+
+@claim("American pricing matches the Longstaff-Schwartz benchmark", "derivatives/american.py")
+def _american_benchmark() -> tuple[bool, str]:
+    """Published value 4.478 for S=36, K=40, r=6%, sigma=20%, T=1."""
+    from quantos.derivatives.american import price_american
+
+    result = price_american(
+        36.0, 40.0, 1.0, 0.20, rate=0.06, n_paths=40_000, n_steps=50, compute_upper=False
+    )
+    tolerance = 3 * result.lower_standard_error + 0.02
+    if abs(result.lower - 4.478) > tolerance:
+        return False, f"got {result.lower:.4f}, published 4.478, tolerance {tolerance:.4f}"
+    return True, f"{result.lower:.4f} +/- {result.lower_standard_error:.4f} against 4.478"
+
+
+@claim("no standard VaR model passes on SPY", "docs/VAR_BACKTEST.md", slow=True)
+def _var_all_fail() -> tuple[bool, str]:
+    """The published negative result, re-derived.
+
+    Uses a simulated series with volatility regimes rather than fetched prices so
+    this runs offline. The claim under test is that a trailing-window VaR
+    understates risk when the regime shifts -- if that stopped being true the
+    document would need rewriting.
+    """
+    from quantos.core.special import ndtri
+    from quantos.risk.var_backtest import backtest_var
+
+    rng = np.random.default_rng(20240719)
+    # Two regimes: long calm stretches punctuated by bursts, as equity indices are.
+    n = 6000
+    volatility = np.where(rng.random(n) < 0.03, 0.045, 0.007)
+    for i in range(1, n):  # make the regime persistent
+        if volatility[i - 1] > 0.02 and rng.random() < 0.93:
+            volatility[i] = 0.045
+    returns = rng.standard_t(4.0, n) / np.sqrt(2.0) * volatility
+
+    window = 500
+    z = float(ndtri(np.array(0.99)))
+    forecasts = np.array([z * np.std(returns[t - window : t], ddof=1) for t in range(window, n)])
+    result = backtest_var(returns[window:], forecasts, confidence=0.99, model="gaussian")
+
+    if not result.kupiec.rejects:
+        return False, (
+            f"a Gaussian VaR now passes coverage at {result.breach_rate:.2%}; "
+            "docs/VAR_BACKTEST.md should be re-checked"
+        )
+    return True, (
+        f"Gaussian VaR breaches {result.breach_rate:.2%} against a promised 1.00%, rejected"
+    )
+
+
 @claim("the runtime imports nothing but NumPy", "DDR-002")
 def _numpy_only() -> tuple[bool, str]:
     """Walk the AST of every runtime module looking for third-party imports.

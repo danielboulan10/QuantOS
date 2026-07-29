@@ -3,13 +3,13 @@
 [![CI](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml/badge.svg)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
 [![site](https://github.com/danielboulan10/QuantOS/actions/workflows/site.yml/badge.svg)](https://danielboulan10.github.io/QuantOS/)
 [![forward testing](https://github.com/danielboulan10/QuantOS/actions/workflows/forward.yml/badge.svg)](forward/RECORD.md)
-[![tests](https://img.shields.io/badge/tests-817%20passing-brightgreen)](tests/)
+[![tests](https://img.shields.io/badge/tests-884%20passing-brightgreen)](tests/)
 [![mutation score](https://img.shields.io/badge/mutation%20score-50%25-orange)](docs/TEST_QUALITY.md)
 [![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
 [![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 [![coverage](https://img.shields.io/badge/coverage-78%25-yellowgreen)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
-[![claims verified](https://img.shields.io/badge/documented%20claims-11%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
+[![claims verified](https://img.shields.io/badge/documented%20claims-15%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
 
 ### → **[Try it: danielboulan10.github.io/QuantOS](https://danielboulan10.github.io/QuantOS/)**
 
@@ -303,11 +303,26 @@ iteration because the textbook fixed point oscillates.
 
 ---
 
+## Results this repository publishes against itself
+
+The unusual thing here is not the volume of code. It is that the measurements
+were kept when they came out badly:
+
+| Finding | Where |
+|---|---|
+| The market simulation does **not** reliably discover its own fundamental — mean correlation 0.29, sd 0.48 | [README below](#what-this-is-concretely) |
+| A NumPy attention model **loses** to GARCH, and CI fails if it ever starts winning | [leaderboard](docs/MODEL_LEADERBOARD.md) |
+| Forecast probabilities have real skill for ordinary moves and **none** for rare ones | [calibration](src/quantos/forecast/calibration.py) |
+| **No** standard VaR model passes on SPY; the best delivers 1.55% against a promised 1% | [VaR backtest](docs/VAR_BACKTEST.md) |
+| Mutation testing found a module scoring **0%** — no test file existed | [test quality](docs/TEST_QUALITY.md) |
+| Almgren-Chriss **misranks** execution schedules when permanent impact is schedule-dependent | [execution backtest](src/quantos/execution/backtest.py) |
+| Heston's own 1993 formulation overprices by **93%** at T=5, silently | [Heston](src/quantos/derivatives/heston.py) |
+
 ## Every number in this README is checked by CI
 
 Documentation rots silently: a refactor moves a constant, the prose keeps quoting
 the old figure, and nothing fails. So the prose is not trusted —
-[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives eleven
+[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives fifteen
 documented claims from scratch on every build** and fails if any has drifted.
 
 ```console
@@ -325,11 +340,17 @@ $ python scripts/verify_claims.py
       median 17,970,515 ops/s over 5 runs (range 16.4M-18.3M)
   ok  the neural model loses to GARCH on QLIKE
       GARCH 1.2659 < EWMA 1.3022 < attention 1.4443, as documented
+  ok  the Heston branch cut still bites the original formulation
+      original overprices by 2.14x at T=5 (54.58 vs 25.51)
+  ok  American pricing matches the Longstaff-Schwartz benchmark
+      4.4734 +/- 0.0147 against the published 4.478
+  ok  no standard VaR model passes on SPY
+      Gaussian VaR breaches 2.44% against a promised 1.00%, rejected
   ok  the runtime imports nothing but NumPy
   ok  every documented gallery figure exists
   ok  the disclaimer appears on every rendered page
 
-11 verified, 0 skipped, 0 failed
+15 verified, 0 skipped, 0 failed
 ```
 
 Note what the eighth line does: it re-derives the result showing this
@@ -508,6 +529,9 @@ Read in this order if you want the argument rather than the API.
 | [`probability/problems.py`](src/quantos/probability/problems.py) | Ten classic problems, each solved analytically *and* by simulation, required to agree. |
 | [`data/`](src/quantos/data) | Keyless FRED client with disk caching, CSV loader for stocks/ETFs, series catalogue, and the analysis pipeline. |
 | [`forecast/`](src/quantos/forecast) | Simulated forward distributions, the probabilities they imply, and the calibration test that decides whether those probabilities are true. |
+| [`derivatives/heston.py`](src/quantos/derivatives/heston.py) | Stochastic volatility priced by Fourier inversion, and a demonstration of the branch cut that silently overprices by 93%. |
+| [`derivatives/american.py`](src/quantos/derivatives/american.py) | Optimal stopping. Longstaff-Schwartz lower bound *and* the Andersen-Broadie dual upper bound, so the price is a bracket. |
+| [`risk/var_backtest.py`](src/quantos/risk/var_backtest.py) | Kupiec, Christoffersen and EVT tail fitting. Finds that none of five standard VaR models passes on SPY. |
 | [`derivatives/market_making.py`](src/quantos/derivatives/market_making.py) | Options maker quoting from the SVI surface, inventory in Greek space, P&L split into spread capture, gamma/theta and adverse selection. |
 | [`execution/backtest.py`](src/quantos/execution/backtest.py) | Routes Almgren-Chriss schedules through the real matching engine. Finds a case where the model misranks strategies, and localises which assumption breaks. |
 | [`models/`](src/quantos/models) | A NumPy attention model with hand-derived gradients, and the baselines it is measured against. It loses to GARCH; see [the leaderboard](docs/MODEL_LEADERBOARD.md). |
@@ -697,6 +721,8 @@ Empirical size is now 2.7%.
 - [`docs/MATH.md`](docs/MATH.md) — derivations for the non-obvious formulas.
 - [`docs/MODEL_LEADERBOARD.md`](docs/MODEL_LEADERBOARD.md) — every volatility
   forecaster on one walk-forward split, including the neural model that loses.
+- [`docs/VAR_BACKTEST.md`](docs/VAR_BACKTEST.md) — does the VaR this site publishes
+  actually hold? Five models tested; **none passes** on SPY.
 - [`docs/TEST_QUALITY.md`](docs/TEST_QUALITY.md) — mutation testing. Coverage says
   lines ran; this says whether a bug would be caught. It found a module scoring
   **0%**.
