@@ -57,6 +57,10 @@ jobs:
           # index, so a disclaimer only on the front page is absent when it counts.
           grep -q "Nothing here is investment advice" site/index.html
           grep -q "Nothing here is investment advice" site/SPY.html
+          # A mistyped ticker must recover rather than dead-end on GitHub's
+          # generic 404, which is what a visitor sees for a case mismatch.
+          test -f site/404.html
+          grep -q "case-sensitive" site/404.html
 
       - name: configure Pages, enabling it if it is not already on
         # enablement:true provisions Pages from the workflow itself. Without it the

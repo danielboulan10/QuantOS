@@ -354,6 +354,31 @@ self.addEventListener('fetch', (event) => {
 """
 
 
+NOT_FOUND = r"""
+<h1>Page not found</h1>
+<p class="sub">That address does not exist on this site. GitHub Pages paths are
+<b>case-sensitive</b>, so <code>spy.html</code> is not the same file as
+<code>SPY.html</code>.</p>
+<p class="hint" id="guess"></p>
+<p><a href="index.html">&larr; Back to the search page</a></p>
+<script>
+// Most 404s here are a ticker typed in the wrong case, or without the .html
+// suffix. Both are recoverable: normalise and offer the corrected address
+// rather than leaving the visitor at a dead end.
+(function () {
+  var path = location.pathname.split('/').pop() || '';
+  var guess = path.replace(/\.html$/i, '').toUpperCase();
+  if (!guess) return;
+  var target = encodeURIComponent(guess) + '.html';
+  document.getElementById('guess').innerHTML =
+    'Did you mean <a href="' + target + '"><code>' + guess + '</code></a>? '
+    + 'Redirecting there in a moment&hellip;';
+  setTimeout(function () { location.replace(target); }, 2500);
+})();
+</script>
+"""
+
+
 def manifest() -> str:
     return json.dumps(
         {
@@ -438,6 +463,11 @@ def main() -> int:
     (out / "universe.json").write_text(json.dumps(entries, indent=2), encoding="utf-8")
     (out / "manifest.webmanifest").write_text(manifest(), encoding="utf-8")
     (out / "sw.js").write_text(SERVICE_WORKER, encoding="utf-8")
+    # GitHub Pages serves this for any unmatched path under the site root, so a
+    # mistyped ticker recovers instead of dead-ending on GitHub's generic page.
+    (out / "404.html").write_text(
+        _shell("QuantOS — page not found", NOT_FOUND, style=style), encoding="utf-8"
+    )
     # Tell GitHub Pages not to run Jekyll over the output.
     (out / ".nojekyll").write_text("", encoding="utf-8")
 
