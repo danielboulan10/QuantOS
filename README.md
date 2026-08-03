@@ -9,7 +9,7 @@ dependency. Every number checked by CI — including the ones that came out badl
 [![tests](https://img.shields.io/badge/tests-932%20passing-brightgreen)](tests/)
 [![mutation score](https://img.shields.io/badge/mutation%20score-53%25-orange)](docs/TEST_QUALITY.md)
 [![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
-[![claims verified](https://img.shields.io/badge/documented%20claims-17%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
+[![claims verified](https://img.shields.io/badge/documented%20claims-19%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
 [![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
@@ -55,6 +55,7 @@ out badly, and CI fails if any of them quietly changes:
 | Almgren-Chriss **misranks** execution schedules when permanent impact is schedule-dependent | [execution](src/quantos/execution/backtest.py) |
 | Mutation testing found a module scoring **0%** — no test file existed | [test quality](docs/TEST_QUALITY.md) |
 | The retirement number every calculator prints is reached only **43%** of the time | [calculator](src/quantos/planning/calculator.py) |
+| Searching **840 factors** on SPY, the best has t = 2.23 and **survives nothing** | [factor lab](src/quantos/research/factor_lab.py) |
 
 **Nothing is imported that could be checked.** One runtime dependency: NumPy.
 Every special function, distribution, statistical test, optimiser, root finder,
@@ -89,6 +90,7 @@ US equities, ETFs, indices (`^GSPC`), foreign listings (`VOD.L`), crypto
 quantos research  --ticker AAPL           # any listed symbol, no key required
 quantos research  --csv my_prices.csv     # or your own file
 quantos research  --series spx            # or anything on FRED
+quantos factors   --ticker SPY            # 840-factor search, corrected for the search
 quantos plan      --volatility 0.15       # investment projection + its distribution
 quantos forward   --ticker SPY            # record predictions, scored later
 quantos surface   --chain chain.csv       # SVI vol surface, variance risk premium
@@ -134,7 +136,7 @@ Saying so is the point.*
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full diagram. In short: a
 dependency-free numerical core, a research layer built on it that reports its own
 limits, and three CI mechanisms that stop the documentation drifting away from
-the code — a hash-chained forward ledger, seventeen re-derived claims, and
+the code — a hash-chained forward ledger, nineteen re-derived claims, and
 mutation testing that grades whether the tests are load-bearing at all.
 
 ---
@@ -390,7 +392,7 @@ iteration because the textbook fixed point oscillates.
 
 Documentation rots silently: a refactor moves a constant, the prose keeps quoting
 the old figure, and nothing fails. So the prose is not trusted —
-[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives seventeen
+[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives nineteen
 documented claims from scratch on every build** and fails if any has drifted.
 
 ```console
@@ -574,6 +576,67 @@ quantos intraday --csv ticks.csv --compare other_ticks.csv
 ```
 
 ---
+
+## The factor lab: 840 factors, and why none of them count
+
+The usual pitch for a factor lab is "generate a thousand signals, test each,
+publish the best." That describes a machine for producing false discoveries.
+Search a thousand worthless signals at the 5% level and roughly fifty come back
+significant; the best will show a t-statistic near 3.2 purely from the
+extreme-value behaviour of a maximum.
+
+So [`research/factor_lab.py`](src/quantos/research/factor_lab.py) does generate
+the factors — 840 of them, from a grammar of ten transforms × seven windows ×
+four scalings × three holding periods, so the search is reproducible and its
+*size* is known exactly. That size is the input every correction needs, and a
+hand-written list of "the factors I tried" is always an undercount, because the
+ones tried and abandoned never make the list.
+
+Then it corrects for the whole search rather than admiring the winner:
+
+```bash
+quantos factors --ticker SPY
+```
+
+| SPY, ten years, 840 factors | |
+|---|---:|
+| Best factor uncorrected (`up_ratio_252d_zscore_h21`) | **t = 2.23**, Sharpe 0.71 |
+| Factors clearing a naive p < 0.05 | 104 of 840 |
+| White's Reality Check | p = 0.186 |
+| Hansen's SPA | p = 0.010 |
+| Romano-Wolf StepM survivors | **0** |
+
+The winner looks publishable. It is not. And the two corrections disagree in a
+way worth reading: SPA rejects "no factor has skill" at p = 0.01, while StepM
+identifies no individual factor at all. Both are right — evidence that
+*something* in a large correlated family works is far cheaper to obtain than
+evidence about *which one*, and only the second is tradeable.
+
+**A lab that always says no is not a test, it is a constant.** So the suite is
+built in pairs: every check that noise is rejected is matched by one that a
+deliberately planted signal is accepted. Plant a rule — tomorrow's return
+follows the sign of trailing 21-day momentum — and the search recovers
+`momentum_21d_sign_h1`, the exact generating rule, at t = 11.4 with SPA
+p < 0.0001. Both halves run in CI.
+
+Building it surfaced two defects in my own design, both invisible in the output:
+
+- **The comparison ranked leverage, not skill.** The grammar produces P&L
+  spanning a 1,900× range in standard deviation — a `raw` momentum signal is a
+  number like 0.4, a `sign` signal is exactly ±1 — so a max-of-means statistic
+  across the columns compared position sizes. With a signal planted
+  deliberately, the true factor sat 143rd of 200 by P&L scale and the Reality
+  Check returned p = 0.0975. Normalising each factor to equal risk fixed it;
+  dividing a column by a positive constant cannot change that factor's own
+  t-statistic, which is what makes the fix safe.
+- **The deflated Sharpe was fed the wrong units, and then the wrong assumption.**
+  It works in per-period Sharpe while the lab stores annualised ones, a 252×
+  error that returned p = 1.0000 on a t = 11.4 signal. Fixing the units exposed
+  the deeper problem: the deflation treats the observed spread of trial Sharpes
+  as if it were pure noise, so genuine skill inflates the very benchmark the
+  winner must clear. Both variants are now reported, because they disagree
+  precisely when there is something to find — and a p-value of 0.90 looks like a
+  verdict rather than a broken assumption.
 
 ## The investment calculator, and the number it leaves out
 

@@ -589,6 +589,71 @@ def _projection_overstates_the_typical_outcome() -> tuple[bool, str]:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Data snooping
+# --------------------------------------------------------------------------- #
+@claim(
+    "the best of hundreds of factors looks significant and is not",
+    "README factor lab section and research/factor_lab.py",
+    slow=True,
+)
+def _factor_lab_finds_nothing_in_noise() -> tuple[bool, str]:
+    """The claim the factor lab exists to make, re-derived rather than quoted.
+
+    Two things must BOTH hold or the demonstration collapses. The winner of a
+    large search over pure noise must clear a naive significance bar -- otherwise
+    there is no illusion to correct -- and it must then fail every correction.
+    A refactor that broke either half would leave a module that still runs and no
+    longer demonstrates anything.
+    """
+    import numpy as np
+
+    from quantos.research.factor_lab import run_factor_lab
+
+    rng = np.random.default_rng(0)
+    report = run_factor_lab(
+        rng.standard_normal(1500) * 0.01, n_factors=200, seed=1, n_bootstrap=400
+    )
+
+    illusion = report.best.t_statistic > 1.96 and report.best.naively_significant
+    corrected = not report.survivors and report.reality_check_p > 0.10
+    return illusion and corrected, (
+        f"best of {report.n_factors} factors: t = {report.best.t_statistic:.2f} "
+        f"(naive p = {report.best.naive_p_value:.3f}); "
+        f"Reality Check p = {report.reality_check_p:.3f}, "
+        f"{len(report.survivors)} survivors"
+    )
+
+
+@claim(
+    "the factor lab detects a signal that is genuinely there",
+    "tests/research/test_factor_lab.py -- the guard against a lab that always says no",
+    slow=True,
+)
+def _factor_lab_is_not_a_constant() -> tuple[bool, str]:
+    """Without this, the claim above is satisfied by a function returning 'no'.
+
+    The planted rule is in the grammar, so a working search should recover the
+    exact generating rule rather than something merely correlated with it.
+    """
+    import numpy as np
+
+    from quantos.research.factor_lab import run_factor_lab
+
+    rng = np.random.default_rng(7)
+    noise = rng.standard_normal(2000) * 0.01
+    returns = np.zeros(2000)
+    for t in range(1, 2000):
+        returns[t] = 0.0022 * np.sign(returns[max(0, t - 21) : t].sum()) + noise[t]
+
+    report = run_factor_lab(returns, n_factors=200, seed=1, n_bootstrap=400)
+    found = report.best.spec.name == "momentum_21d_sign_h1"
+    return found and bool(report.survivors), (
+        f"recovered {report.best.spec.name} (t = {report.best.t_statistic:.1f}), "
+        f"{len(report.survivors)} survivors, SPA p = {report.spa_p:.4f}"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true", help="skip the slow simulations")

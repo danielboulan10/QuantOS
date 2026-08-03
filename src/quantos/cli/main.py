@@ -1068,6 +1068,38 @@ def cmd_intraday(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_factors(args: argparse.Namespace) -> int:
+    """Search a large factor grid, and correct for having searched it."""
+    import numpy as np
+
+    from quantos.research.factor_lab import run_factor_lab
+
+    if args.ticker:
+        from quantos.data.market import fetch_prices
+
+        series, info = fetch_prices(args.ticker)
+        returns = series.log_returns()
+        print(f"{info.describe()} -- {len(returns):,} daily returns\n")
+    else:
+        rng = np.random.default_rng(args.seed)
+        returns = rng.standard_normal(args.n_synthetic) * 0.01
+        print(
+            f"No ticker given, so the search runs on {args.n_synthetic:,} synthetic\n"
+            "returns with no signal in them whatsoever. Whatever the best factor\n"
+            "looks like below, it is nothing.\n"
+        )
+
+    report = run_factor_lab(
+        returns,
+        n_factors=args.n_factors,
+        alpha=args.alpha,
+        n_bootstrap=args.bootstrap,
+        seed=args.seed,
+    )
+    print(report.summary())
+    return 0
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
     """Project a savings plan, then show the distribution the projection hides."""
     from quantos.planning import investment_schedule, required_contribution, simulate_plan
@@ -1368,6 +1400,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--session", type=int, default=0, help="which session to analyse in detail")
     p.add_argument("--compare", default=None, help="second intraday file, for the Epps curve")
     p.set_defaults(func=cmd_intraday)
+
+    p = sub.add_parser("factors", help="search a large factor grid, corrected for the search")
+    p.add_argument("--ticker", default=None, help="instrument to search; omit for pure noise")
+    p.add_argument("--n-factors", type=int, default=None, help="grid subset; omit for all 840")
+    p.add_argument("--alpha", type=float, default=0.05, help="family-wise error rate")
+    p.add_argument("--bootstrap", type=int, default=500)
+    p.add_argument("--n-synthetic", type=int, default=2000)
+    p.add_argument("--seed", type=int, default=0)
+    p.set_defaults(func=cmd_factors)
 
     p = sub.add_parser("plan", help="investment projection, with the risk the projection hides")
     p.add_argument("--start", type=float, default=20_000.0, help="starting amount")
