@@ -24,6 +24,8 @@ import numpy as np
 from quantos import __version__
 
 if TYPE_CHECKING:
+    from numpy.typing import ArrayLike
+
     from quantos.sim.world import SimulationResult
 
 _BOLD = "\033[1m"
@@ -1068,6 +1070,52 @@ def cmd_intraday(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_stress(args: argparse.Namespace) -> int:
+    """Replay an instrument through crises that actually happened."""
+    import numpy as np
+
+    from quantos.data.market import fetch_prices
+    from quantos.risk.stress import CRISES, correlation_breakdown, stress_test
+
+    series, info = fetch_prices(args.ticker, range_key=args.range)
+    dates = np.asarray(series.dates, dtype="datetime64[D]")
+    prices = np.asarray(series.prices, dtype=float)
+
+    print(f"{info.describe()}\n")
+    report = stress_test(dates, prices)
+    print(report.summary())
+
+    if not args.against:
+        return 0
+
+    # Correlation needs a second leg, and the comparison assets must be aligned
+    # onto the same dates -- a shorter history would otherwise silently shift
+    # every observation.
+    returns: dict[str, ArrayLike] = {}
+    for symbol in [args.ticker, *args.against]:
+        other, _ = fetch_prices(symbol, range_key=args.range)
+        other_dates = np.asarray(other.dates, dtype="datetime64[D]")
+        other_prices = np.asarray(other.prices, dtype=float)
+        aligned = np.full(dates.size, np.nan)
+        shared = np.isin(dates, other_dates)
+        aligned[shared] = np.interp(
+            dates[shared].astype(float), other_dates.astype(float), other_prices
+        )
+        step = np.zeros(dates.size)
+        step[1:] = np.diff(aligned) / aligned[:-1]
+        returns[symbol] = np.nan_to_num(step)
+
+    print()
+    for crisis in CRISES:
+        breakdown = correlation_breakdown(
+            dates, returns, crisis, risk_assets={args.ticker} | set(args.risk or [])
+        )
+        if breakdown.pairs:
+            print(breakdown.summary())
+            print()
+    return 0
+
+
 def cmd_factors(args: argparse.Namespace) -> int:
     """Search a large factor grid, and correct for having searched it."""
     import numpy as np
@@ -1400,6 +1448,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--session", type=int, default=0, help="which session to analyse in detail")
     p.add_argument("--compare", default=None, help="second intraday file, for the Epps curve")
     p.set_defaults(func=cmd_intraday)
+
+    p = sub.add_parser("stress", help="replay an instrument through real historical crises")
+    p.add_argument("--ticker", required=True)
+    p.add_argument("--range", default="20y", help="history length; 20y reaches 2008")
+    p.add_argument("--against", nargs="*", default=None, help="assets to correlate against")
+    p.add_argument("--risk", nargs="*", default=None, help="which of those are risk assets")
+    p.set_defaults(func=cmd_stress)
 
     p = sub.add_parser("factors", help="search a large factor grid, corrected for the search")
     p.add_argument("--ticker", default=None, help="instrument to search; omit for pure noise")

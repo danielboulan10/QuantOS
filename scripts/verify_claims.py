@@ -654,6 +654,84 @@ def _factor_lab_is_not_a_constant() -> tuple[bool, str]:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Stress testing
+# --------------------------------------------------------------------------- #
+@claim(
+    "the stock-bond hedge inverted in 2022, and held in 2008 and 2020",
+    "README stress test section and risk/stress.py",
+    conditional=True,
+)
+def _the_hedge_inverted_in_2022() -> tuple[bool, str]:
+    """The most consequential number in the module, re-derived from live data.
+
+    A 60/40 portfolio is built on a negative stock-bond correlation. That
+    correlation is not a constant: it depends on whether the shock is to growth
+    or to the discount rate. In 2022 it was the discount rate, so the hedge and
+    the risk asset shared a cause. If this ever stops being true the README's
+    argument is wrong and should be rewritten, not quietly kept.
+    """
+    import numpy as np
+
+    from quantos.data.market import MarketDataError, fetch_prices
+    from quantos.risk.stress import CRISES, correlation_breakdown
+
+    try:
+        returns = {}
+        for symbol in ("SPY", "TLT"):
+            series, _ = fetch_prices(symbol, range_key="20y")
+            prices = np.asarray(series.prices, dtype=float)
+            step = np.zeros(prices.size)
+            step[1:] = np.diff(prices) / prices[:-1]
+            returns[symbol] = step
+        dates = np.asarray(series.dates, dtype="datetime64[D]")
+    except (MarketDataError, OSError) as error:
+        return True, f"SKIP: market data unavailable ({type(error).__name__}: {error})"
+
+    measured = {}
+    for crisis in CRISES:
+        breakdown = correlation_breakdown(dates, returns, crisis)
+        if breakdown.pairs:
+            measured[crisis.name] = breakdown.pairs[0]
+
+    inflation = measured.get("2022 inflation shock")
+    gfc = measured.get("global financial crisis")
+    if inflation is None or gfc is None:
+        return True, "SKIP: history does not reach both windows"
+
+    inverted = inflation.calm < -0.2 and inflation.stressed > -0.1
+    held = gfc.stressed < gfc.calm
+    return inverted and held, (
+        f"2022: {inflation.calm:+.2f} -> {inflation.stressed:+.2f} (hedge inverted); "
+        f"GFC: {gfc.calm:+.2f} -> {gfc.stressed:+.2f} (hedge held)"
+    )
+
+
+@claim(
+    "an instrument listed mid-crisis is refused rather than given a shallow number",
+    "risk/stress.py -- the survivorship guard",
+)
+def _partial_coverage_is_refused() -> tuple[bool, str]:
+    """Partial coverage is more dangerous than none, because it looks like a result."""
+    import numpy as np
+
+    from quantos.risk.stress import CRISES, stress_test
+
+    gfc = next(crisis for crisis in CRISES if "financial" in crisis.name)
+    dates = np.arange(
+        np.datetime64("2008-11-01"), np.datetime64("2015-01-01"), dtype="datetime64[D]"
+    )
+    rng = np.random.default_rng(0)
+    prices = 100.0 * np.exp(np.cumsum(rng.standard_normal(dates.size) * 0.01))
+
+    result = next(r for r in stress_test(dates, prices).results if r.crisis is gfc)
+    refused = not result.covered and result.coverage > 0.1
+    return refused, (
+        f"{result.coverage:.0%} of the GFC window present, correctly refused: "
+        f"{result.reason[:60]}..."
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true", help="skip the slow simulations")

@@ -6,10 +6,10 @@ dependency. Every number checked by CI — including the ones that came out badl
 [![CI](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml/badge.svg)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
 [![site](https://github.com/danielboulan10/QuantOS/actions/workflows/site.yml/badge.svg)](https://danielboulan10.github.io/QuantOS/)
 [![forward testing](https://github.com/danielboulan10/QuantOS/actions/workflows/forward.yml/badge.svg)](forward/RECORD.md)
-[![tests](https://img.shields.io/badge/tests-932%20passing-brightgreen)](tests/)
-[![mutation score](https://img.shields.io/badge/mutation%20score-53%25-orange)](docs/TEST_QUALITY.md)
+[![tests](https://img.shields.io/badge/tests-993%20passing-brightgreen)](tests/)
+[![mutation score](https://img.shields.io/badge/mutation%20score-55%25-orange)](docs/TEST_QUALITY.md)
 [![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
-[![claims verified](https://img.shields.io/badge/documented%20claims-19%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
+[![claims verified](https://img.shields.io/badge/documented%20claims-21%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
 [![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
@@ -56,6 +56,7 @@ out badly, and CI fails if any of them quietly changes:
 | Mutation testing found a module scoring **0%** — no test file existed | [test quality](docs/TEST_QUALITY.md) |
 | The retirement number every calculator prints is reached only **43%** of the time | [calculator](src/quantos/planning/calculator.py) |
 | Searching **840 factors** on SPY, the best has t = 2.23 and **survives nothing** | [factor lab](src/quantos/research/factor_lab.py) |
+| The stock-bond hedge **inverted** in 2022 — TLT fell 31% against SPY's 24% | [stress tests](src/quantos/risk/stress.py) |
 
 **Nothing is imported that could be checked.** One runtime dependency: NumPy.
 Every special function, distribution, statistical test, optimiser, root finder,
@@ -90,6 +91,7 @@ US equities, ETFs, indices (`^GSPC`), foreign listings (`VOD.L`), crypto
 quantos research  --ticker AAPL           # any listed symbol, no key required
 quantos research  --csv my_prices.csv     # or your own file
 quantos research  --series spx            # or anything on FRED
+quantos stress    --ticker SPY --against TLT   # replay through 2008, COVID, 2022
 quantos factors   --ticker SPY            # 840-factor search, corrected for the search
 quantos plan      --volatility 0.15       # investment projection + its distribution
 quantos forward   --ticker SPY            # record predictions, scored later
@@ -103,7 +105,7 @@ quantos simulate                          # agent-based market
 quantos book                              # order book throughput + invariants
 quantos demo                              # tour every subsystem, ~2 minutes
 quantos doctor                            # environment check
-pytest                                    # 932 tests, incl. every docstring example
+pytest                                    # 993 tests, incl. every docstring example
 ```
 </details>
 
@@ -136,7 +138,7 @@ Saying so is the point.*
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full diagram. In short: a
 dependency-free numerical core, a research layer built on it that reports its own
 limits, and three CI mechanisms that stop the documentation drifting away from
-the code — a hash-chained forward ledger, nineteen re-derived claims, and
+the code — a hash-chained forward ledger, twenty-one re-derived claims, and
 mutation testing that grades whether the tests are load-bearing at all.
 
 ---
@@ -392,7 +394,7 @@ iteration because the textbook fixed point oscillates.
 
 Documentation rots silently: a refactor moves a constant, the prose keeps quoting
 the old figure, and nothing fails. So the prose is not trusted —
-[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives nineteen
+[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives twenty-one
 documented claims from scratch on every build** and fails if any has drifted.
 
 ```console
@@ -577,6 +579,61 @@ quantos intraday --csv ticks.csv --compare other_ticks.csv
 
 ---
 
+## Stress testing against crises that actually happened
+
+A simulated shock tells you what your model thinks. A dated historical window
+tells you what the market did.
+
+```bash
+quantos stress --ticker SPY --against TLT GLD
+```
+
+| SPY, 2006–2026 | drawdown | worst day | vol | recovery |
+|---|---:|---:|---:|---:|
+| dot-com unwind | *not testable* | | | |
+| global financial crisis | **−55.2%** | −9.8% | ×2.9 | 869 days |
+| COVID crash | −33.7% | −10.9% | **×6.4** | 97 days |
+| 2022 inflation shock | −24.5% | −4.3% | ×1.9 | 294 days |
+| regional banking crisis | −4.7% | −1.8% | ×0.7 | 191 days |
+
+**The first row is the feature.** The data does not reach 2000, so the window is
+reported as untestable rather than dropped — an omitted row reads as a row that
+was survived. The same rule refuses instruments listed part-way through a
+crisis: an ETF launched in November 2008 has 25% of the GFC window in its
+history and would report a shallow drawdown, having missed the collapse. Partial
+coverage is more dangerous than none, because it looks like a result.
+
+### The stock–bond hedge is not a constant
+
+| SPY–TLT correlation | before | during | SPY | TLT |
+|---|---:|---:|---:|---:|
+| global financial crisis | −0.18 | **−0.47** | −54.8% | **+24.9%** |
+| COVID crash | −0.39 | **−0.50** | −33.4% | **+14.2%** |
+| **2022 inflation shock** | −0.40 | **+0.03** | −24.1% | **−31.2%** |
+
+In 2008 and 2020 the hedge held and held harder. In 2022 it inverted: bonds fell
+*more* than equities, because the shock was the discount rate itself, so the
+hedge and the risk asset shared a cause. A 60/40 portfolio optimised on the
+previous decade had the correlation's **sign** wrong, not its magnitude. CI fails
+if this stops being true.
+
+### The statistic that hid the answer
+
+The first version of this reported one mean pairwise correlation. Through the
+GFC, on SPY/QQQ/IWM/EFA/TLT/GLD, that number *fell* — and the function concluded
+the assets had diversified, which is the opposite of the risk being looked for.
+The average had netted two effects moving in opposite directions:
+
+| pair type | calm | crisis |
+|---|---:|---:|
+| equity–equity | +0.84 | **+0.90** |
+| equity vs bonds/gold | +0.05 | **−0.20** |
+
+Correlations among the risk assets *did* converge — which is where the
+concentration is, and therefore where it hurts. Bonds meanwhile diversified
+harder, because a flight to quality is a bid for Treasuries. The decomposition is
+now the output; the average is not reported at all.
+
 ## The factor lab: 840 factors, and why none of them count
 
 The usual pitch for a factor lab is "generate a thousand signals, test each,
@@ -696,6 +753,7 @@ Read in this order if you want the argument rather than the API.
 | [`core/timeseries/`](src/quantos/core/timeseries) | OLS with HAC errors, GARCH/GJR-GARCH MLE, exact OU estimation, Engle-Granger and Johansen cointegration. |
 | [`derivatives/black_scholes.py`](src/quantos/derivatives/black_scholes.py) | Full Greek set (through vanna/volga/charm), safeguarded implied volatility. |
 | [`planning/calculator.py`](src/quantos/planning/calculator.py) | Compound-interest projection matched to a published schedule, and the distribution it hides. |
+| [`risk/stress.py`](src/quantos/risk/stress.py) | Historical crisis replay, with survivorship refused rather than papered over. |
 | [`risk/`](src/quantos/risk) | Coherent risk measures, Ledoit-Wolf shrinkage, HRP, risk parity, Kelly. |
 | [`execution/almgren_chriss.py`](src/quantos/execution/almgren_chriss.py) | Optimal execution frontier, square-root impact law and a test of its exponent. |
 | [`probability/problems.py`](src/quantos/probability/problems.py) | Ten classic problems, each solved analytically *and* by simulation, required to agree. |
