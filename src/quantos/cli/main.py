@@ -1068,6 +1068,47 @@ def cmd_intraday(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_plan(args: argparse.Namespace) -> int:
+    """Project a savings plan, then show the distribution the projection hides."""
+    from quantos.planning import investment_schedule, required_contribution, simulate_plan
+
+    plan = investment_schedule(
+        args.start,
+        args.years,
+        args.rate,
+        contribution=args.contribution,
+        frequency=args.frequency,
+    )
+    print(plan.summary())
+
+    if args.volatility <= 0:
+        print("\npass --volatility to see the distribution behind the projection")
+        return 0
+
+    outcome = simulate_plan(
+        args.start,
+        args.years,
+        args.rate,
+        args.volatility,
+        contribution=args.contribution,
+        frequency=args.frequency,
+        n_paths=args.paths,
+        seed=args.seed,
+    )
+    print()
+    print(outcome.summary())
+
+    if args.target is not None:
+        needed = required_contribution(
+            args.start, args.years, args.rate, args.target, frequency=args.frequency
+        )
+        print(
+            f"\nto reach {args.target:,.0f} at a fixed {args.rate:.2%}, "
+            f"contribute {needed:,.2f} per period"
+        )
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     """Run the local research viewer: a search bar for the whole pipeline."""
     from quantos.web.server import serve
@@ -1327,6 +1368,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--session", type=int, default=0, help="which session to analyse in detail")
     p.add_argument("--compare", default=None, help="second intraday file, for the Epps curve")
     p.set_defaults(func=cmd_intraday)
+
+    p = sub.add_parser("plan", help="investment projection, with the risk the projection hides")
+    p.add_argument("--start", type=float, default=20_000.0, help="starting amount")
+    p.add_argument("--years", type=float, default=10.0)
+    p.add_argument("--rate", type=float, default=0.06, help="annual return, e.g. 0.06")
+    p.add_argument("--contribution", type=float, default=1_000.0, help="added each period")
+    p.add_argument("--frequency", default="monthly", help="monthly, quarterly, annually, ...")
+    p.add_argument("--volatility", type=float, default=0.15, help="annual volatility; 0 disables")
+    p.add_argument("--target", type=float, default=None, help="solve for the contribution needed")
+    p.add_argument("--paths", type=int, default=20_000)
+    p.add_argument("--seed", type=int, default=0)
+    p.set_defaults(func=cmd_plan)
 
     p = sub.add_parser("serve", help="search bar: type a ticker in your browser")
     p.add_argument("--host", default="127.0.0.1", help="bind address (localhost by default)")

@@ -317,12 +317,13 @@ were kept when they came out badly:
 | Mutation testing found a module scoring **0%** — no test file existed | [test quality](docs/TEST_QUALITY.md) |
 | Almgren-Chriss **misranks** execution schedules when permanent impact is schedule-dependent | [execution backtest](src/quantos/execution/backtest.py) |
 | Heston's own 1993 formulation overprices by **93%** at T=5, silently | [Heston](src/quantos/derivatives/heston.py) |
+| The retirement number every calculator prints is reached only **43%** of the time | [calculator](src/quantos/planning/calculator.py) |
 
 ## Every number in this README is checked by CI
 
 Documentation rots silently: a refactor moves a constant, the prose keeps quoting
 the old figure, and nothing fails. So the prose is not trusted —
-[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives fifteen
+[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives seventeen
 documented claims from scratch on every build** and fails if any has drifted.
 
 ```console
@@ -507,6 +508,46 @@ quantos intraday --csv ticks.csv --compare other_ticks.csv
 
 ---
 
+## The investment calculator, and the number it leaves out
+
+Every compound-interest calculator on the web answers the same question: what if
+the return were exactly the same every year? Put $20,000 in, add $1,000 a month
+for ten years at 6%, and they return **$198,290.40**.
+
+[`planning/calculator.py`](src/quantos/planning/calculator.py) returns that
+figure too — and matches Calculator.net's published year-by-year schedule to the
+cent, every year, which is the check that made the module worth writing. The
+convention is not documented anywhere: their monthly rate is the *effective*
+`(1+r)^(1/12) - 1`, not the nominal `r/12`. Assuming the nominal rate misses
+their ten-year figure by more than $9, and
+[a test asserts that](tests/planning/test_calculator.py) so the distinction
+cannot be lost in a refactor.
+
+Then it answers the question the others do not:
+
+| | |
+|---|---:|
+| Fixed-rate projection | $198,290 |
+| Median outcome at 15% volatility | $187,439 |
+| **Probability of reaching the projection** | **43%** |
+| 5th percentile | $114,736 |
+
+The projected number is not the typical outcome — it is roughly the 56th
+percentile, and a plan built around it falls short more often than not.
+Compounding is multiplicative, so averaging the *rate* is not the same as
+averaging the *result*; the gap is volatility drag, and for a lump sum it is
+exactly `exp(-sigma^2 T / 2)`. Regular contributions dilute it, because money
+added later is exposed to less of the compounding, and the measured gap here is
+6% rather than the 11% a lump sum would suffer.
+
+```bash
+quantos plan --start 20000 --years 10 --rate 0.06 --contribution 1000 --volatility 0.15
+```
+
+It is also [a page on the site](https://danielboulan10.github.io/QuantOS/calculator.html),
+where the same arithmetic runs in the browser and the simulation runs alongside
+it, so the two numbers appear together instead of only the flattering one.
+
 ## Repository map
 
 Read in this order if you want the argument rather than the API.
@@ -524,6 +565,7 @@ Read in this order if you want the argument rather than the API.
 | [`core/stats/multipletest.py`](src/quantos/core/stats/multipletest.py) | White's Reality Check, Hansen's SPA, Romano-Wolf StepM. |
 | [`core/timeseries/`](src/quantos/core/timeseries) | OLS with HAC errors, GARCH/GJR-GARCH MLE, exact OU estimation, Engle-Granger and Johansen cointegration. |
 | [`derivatives/black_scholes.py`](src/quantos/derivatives/black_scholes.py) | Full Greek set (through vanna/volga/charm), safeguarded implied volatility. |
+| [`planning/calculator.py`](src/quantos/planning/calculator.py) | Compound-interest projection matched to a published schedule, and the distribution it hides. |
 | [`risk/`](src/quantos/risk) | Coherent risk measures, Ledoit-Wolf shrinkage, HRP, risk parity, Kelly. |
 | [`execution/almgren_chriss.py`](src/quantos/execution/almgren_chriss.py) | Optimal execution frontier, square-root impact law and a test of its exponent. |
 | [`probability/problems.py`](src/quantos/probability/problems.py) | Ten classic problems, each solved analytically *and* by simulation, required to agree. |

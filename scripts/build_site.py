@@ -104,7 +104,7 @@ DEFAULT_UNIVERSE: tuple[str, ...] = (
 )
 
 
-from quantos.web.server import DISCLAIMER  # noqa: E402 - needs the sys.path line above
+from quantos.web.server import DISCLAIMER, _card  # noqa: E402 - needs the sys.path line above
 
 
 def _now() -> str:
@@ -189,7 +189,8 @@ build covered it.</p>
 </ul></div>
 
 <footer><b>{DISCLAIMER}</b><br><br>
-Built {_now()} · <a href="methodology.html">Methodology</a> ·
+Built {_now()} · <a href="calculator.html">Calculator</a> ·
+<a href="methodology.html">Methodology</a> ·
 <a href="https://github.com/danielboulan10/QuantOS">Source</a></footer>
 
 <script>
@@ -205,6 +206,175 @@ function filterRows(q) {{
 }}
 </script>"""
     return _shell("QuantOS", body, style=style)
+
+
+def build_calculator(style: str) -> str:
+    """The investment calculator, with the part other calculators omit."""
+    from quantos.planning import investment_schedule, simulate_plan
+
+    plan = investment_schedule(20_000, 10, 0.06, contribution=1_000)
+    outcome = simulate_plan(20_000, 10, 0.06, 0.15, contribution=1_000, n_paths=40_000)
+
+    rows = "".join(
+        f"<tr><td>{r.year}</td><td>{r.deposits:,.2f}</td>"
+        f"<td>{r.interest:,.2f}</td><td>{r.ending_balance:,.2f}</td></tr>"
+        for r in plan.rows
+    )
+    bands = "".join(
+        f"<tr><td>{level}th percentile</td><td>{value:,.0f}</td></tr>"
+        for level, value in sorted(outcome.percentiles.items())
+    )
+
+    body = f"""
+<h1>Investment calculator</h1>
+<p class="sub">Compound a starting balance and regular contributions — and then see
+what a fixed rate leaves out.</p>
+<p><a href="index.html">&larr; Back to search</a></p>
+
+<form class="plan" onsubmit="return recalc()" autocomplete="off">
+  <div class="grid">
+    <label>Starting amount<input type="number" id="start" value="20000" step="any"></label>
+    <label>Years<input type="number" id="years" value="10" step="any"></label>
+    <label>Return rate %<input type="number" id="rate" value="6" step="any"></label>
+    <label>Contribution<input type="number" id="contrib" value="1000" step="any"></label>
+    <label>Volatility %<input type="number" id="vol" value="15" step="any"></label>
+    <label>Frequency
+      <select id="freq">
+        <option value="12" selected>monthly</option>
+        <option value="4">quarterly</option>
+        <option value="1">annually</option>
+      </select>
+    </label>
+  </div>
+  <button type="submit">Calculate</button>
+</form>
+
+<div id="out"></div>
+
+<h2>Worked example — and why the headline number misleads</h2>
+<div class="cards">
+  {_card("Fixed-rate projection", f"{plan.end_balance:,.0f}", "what every calculator shows")}
+  {_card("Median outcome", f"{outcome.median:,.0f}", "with 15% volatility", "warn")}
+  {
+        _card(
+            "Chance of reaching it",
+            f"{outcome.probability_of_target:.0%}",
+            "of hitting the projected figure",
+            "bad",
+        )
+    }
+  {_card("5th percentile", f"{outcome.percentiles[5]:,.0f}", "one year in twenty is worse")}
+</div>
+
+<div class="panel" style="margin-top:16px">
+<b>$20,000, ten years, 6%, $1,000 a month.</b> Every calculator on the web returns
+<b>{plan.end_balance:,.2f}</b> — and this one matches Calculator.net's published
+schedule to the cent, year by year, so the arithmetic is not in question.
+<br><br>
+What is in question is the assumption. Six percent <i>every year</i> never
+happens. Allow the return to vary at a realistic 15% volatility and that same plan
+reaches the projected figure only <b>{outcome.probability_of_target:.0%}</b> of the
+time. The median lands at {outcome.median:,.0f}; one run in twenty ends below
+{outcome.percentiles[5]:,.0f}.
+<br><br>
+The projection is not wrong — it answers a different question. It says what happens
+if returns are constant. Compounding is multiplicative, so averaging the rate is not
+the same as averaging the result, and the printed number sits <b>above</b> the median
+rather than at it.
+</div>
+
+<h2>Distribution of outcomes</h2>
+<div class="scroll"><table>
+<tr><th>Outcome</th><th>Balance</th></tr>
+{bands}
+</table></div>
+
+<h2>Accumulation schedule at a fixed 6%</h2>
+<div class="scroll"><table>
+<tr><th>Year</th><th>Deposit</th><th>Interest</th><th>Ending balance</th></tr>
+{rows}
+</table></div>
+
+<footer><b>{DISCLAIMER}</b><br><br>
+<a href="index.html">Search</a> · <a href="methodology.html">Methodology</a> ·
+<a href="https://github.com/danielboulan10/QuantOS">Source</a></footer>
+
+<script>
+function periodic(annual, m) {{ return Math.pow(1 + annual, 1 / m) - 1; }}
+
+function project(start, years, rate, contrib, m) {{
+  var r = periodic(rate, m), bal = start, contributed = 0, rows = [], yearInterest = 0;
+  var n = Math.round(years * m);
+  for (var i = 1; i <= n; i++) {{
+    var interest = bal * r;
+    bal += interest; bal += contrib; contributed += contrib; yearInterest += interest;
+    if (i % m === 0 || i === n) {{
+      rows.push({{year: Math.ceil(i / m), interest: yearInterest, balance: bal}});
+      yearInterest = 0;
+    }}
+  }}
+  return {{balance: bal, contributed: contributed, rows: rows}};
+}}
+
+// Median of a lognormal plan, by simulation. Small enough to run in the page.
+function simulate(start, years, rate, vol, contrib, m, paths) {{
+  var n = Math.round(years * m), s = vol / Math.sqrt(m);
+  var drift = Math.log(1 + rate) / m - 0.5 * s * s;
+  var out = new Float64Array(paths);
+  for (var p = 0; p < paths; p++) {{
+    var bal = start;
+    for (var i = 0; i < n; i++) {{
+      var u = Math.random(), v = Math.random();
+      var z = Math.sqrt(-2 * Math.log(u || 1e-12)) * Math.cos(2 * Math.PI * v);
+      bal = bal * Math.exp(drift + s * z) + contrib;
+    }}
+    out[p] = bal;
+  }}
+  out.sort();
+  return out;
+}}
+
+function money(x) {{ return x.toLocaleString(undefined, {{maximumFractionDigits: 0}}); }}
+
+function recalc() {{
+  var start = +document.getElementById('start').value;
+  var years = +document.getElementById('years').value;
+  var rate = +document.getElementById('rate').value / 100;
+  var contrib = +document.getElementById('contrib').value;
+  var vol = +document.getElementById('vol').value / 100;
+  var m = +document.getElementById('freq').value;
+  if (!(years > 0)) return false;
+
+  var fixed = project(start, years, rate, contrib, m);
+  var paths = simulate(start, years, rate, vol, contrib, m, 4000);
+  var pick = function (q) {{ return paths[Math.floor(q * paths.length)]; }};
+  var hit = 0;
+  for (var i = 0; i < paths.length; i++) if (paths[i] >= fixed.balance) hit++;
+
+  var rows = fixed.rows.map(function (r) {{
+    return '<tr><td>' + r.year + '</td><td>' + money(r.interest) +
+           '</td><td>' + money(r.balance) + '</td></tr>';
+  }}).join('');
+
+  document.getElementById('out').innerHTML =
+    '<div class="cards" style="margin-top:16px">' +
+    '<div class="card"><div class="k">Fixed-rate projection</div><div class="v">' +
+      money(fixed.balance) + '</div><div class="n">contributions ' +
+      money(fixed.contributed) + '</div></div>' +
+    '<div class="card"><div class="k">Median with volatility</div><div class="v warn">' +
+      money(pick(0.5)) + '</div></div>' +
+    '<div class="card"><div class="k">Chance of reaching it</div><div class="v bad">' +
+      Math.round(100 * hit / paths.length) + '%</div></div>' +
+    '<div class="card"><div class="k">5th percentile</div><div class="v">' +
+      money(pick(0.05)) + '</div><div class="n">one in twenty is worse</div></div>' +
+    '</div>' +
+    '<div class="scroll" style="margin-top:14px"><table>' +
+    '<tr><th>Year</th><th>Interest</th><th>Ending balance</th></tr>' + rows + '</table></div>';
+  return false;
+}}
+recalc();
+</script>"""
+    return _shell("QuantOS — investment calculator", body, style=style)
 
 
 def build_methodology(style: str) -> str:
@@ -302,6 +472,13 @@ with overlapping forecasts discounted to their independent count.
 
 
 EXTRA_STYLE = """
+label { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted); }
+label input, label select { padding:9px 12px; font-size:15px; border-radius:8px;
+  border:1px solid var(--line); background:var(--panel); color:var(--ink); }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:12px; margin-bottom:14px; }
+form.plan { display:block; margin-bottom:18px; }
+form.plan button { margin-bottom:6px; }
 .filter { width:100%; padding:10px 14px; font-size:15px; border-radius:8px;
   border:1px solid var(--line); background:var(--panel); color:var(--ink); margin:6px 0 14px; }
 .table { border:1px solid var(--line); border-radius:10px; overflow:hidden; }
@@ -460,6 +637,7 @@ def main() -> int:
     entries.sort(key=lambda e: e["ticker"])
     (out / "index.html").write_text(build_index(entries, style), encoding="utf-8")
     (out / "methodology.html").write_text(build_methodology(style), encoding="utf-8")
+    (out / "calculator.html").write_text(build_calculator(style), encoding="utf-8")
     (out / "universe.json").write_text(json.dumps(entries, indent=2), encoding="utf-8")
     (out / "manifest.webmanifest").write_text(manifest(), encoding="utf-8")
     (out / "sw.js").write_text(SERVICE_WORKER, encoding="utf-8")

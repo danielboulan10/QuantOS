@@ -530,6 +530,65 @@ def _disclaimer_everywhere() -> tuple[bool, str]:
 
 
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Financial planning
+# --------------------------------------------------------------------------- #
+@claim(
+    "the schedule reproduces Calculator.net's published figures to the cent",
+    "planning/calculator.py docstring and the site's calculator page",
+)
+def _calculator_matches_the_published_schedule() -> tuple[bool, str]:
+    """The convention was reverse-engineered, so it has to be re-checked.
+
+    Calculator.net does not document whether its monthly rate is the nominal
+    r/12 or the effective (1+r)^(1/12)-1. Only the second reproduces their
+    numbers. If a refactor ever swaps the convention the schedule stays
+    plausible -- it just quietly stops being the figure everyone else quotes --
+    so the check is against their published table, not against our own output.
+    """
+    from quantos.planning import investment_schedule
+
+    published = {
+        1: 33_526.53,
+        2: 47_864.65,
+        3: 63_063.06,
+        4: 79_173.37,
+        5: 96_250.30,
+        6: 114_351.84,
+        7: 133_539.48,
+        8: 153_878.38,
+        9: 175_437.61,
+        10: 198_290.40,
+    }
+    plan = investment_schedule(20_000.0, 10, 0.06, contribution=1_000.0)
+    worst = max(abs(row.ending_balance - published[row.year]) for row in plan.rows)
+    ok = worst < 0.005
+    return ok, f"worst year-end difference across ten years: ${worst:.4f}"
+
+
+@claim(
+    "the fixed-rate projection sits above the median outcome, not at it",
+    "README negative results table and the calculator page",
+)
+def _projection_overstates_the_typical_outcome() -> tuple[bool, str]:
+    """The whole reason the page exists, re-derived rather than asserted.
+
+    Compounding is multiplicative, so the arithmetic-mean rate does not describe
+    the middle of the distribution it generates. If this ever came out the other
+    way the page's argument would be wrong and it should be rewritten, not
+    quietly kept.
+    """
+    from quantos.planning import investment_schedule, simulate_plan
+
+    plan = investment_schedule(20_000.0, 10, 0.06, contribution=1_000.0)
+    outcome = simulate_plan(20_000.0, 10, 0.06, 0.15, contribution=1_000.0, n_paths=60_000, seed=7)
+    ok = outcome.median < plan.end_balance and outcome.probability_of_target < 0.5
+    return ok, (
+        f"projection ${plan.end_balance:,.0f}; median ${outcome.median:,.0f}; "
+        f"reached {outcome.probability_of_target:.1%} of the time"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true", help="skip the slow simulations")
