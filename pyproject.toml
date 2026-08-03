@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quantos"
-version = "1.0.0"
+version = "1.4.0"
 description = "A quantitative research platform: exchange simulation, microstructure research, and backtest-overfitting controls."
 readme = "README.md"
 license = { file = "LICENSE" }

@@ -1,0 +1,87 @@
+[
+ {
+  "command": "quantos doctor",
+  "caption": "86 modules, one runtime dependency",
+  "lines": [
+   "QuantOS environment check",
+   "=========================",
+   "quantos              1.4.0",
+   "python               3.12.13",
+   "numpy                2.5.1",
+   "scipy                1.18.0  (test-only oracle, not a runtime dependency)",
+   "Module import check",
+   "... 88 more lines ..."
+  ],
+  "seconds": 0.19714604201726615
+ },
+ {
+  "command": "quantos research --ticker NVDA",
+  "caption": "any listed symbol, no API key",
+  "lines": [
+   "... 92 lines omitted ...",
+   "--------------------------------",
+   "   participation   impact (bps)",
+   "            0.1%          125.7",
+   "            0.5%          281.1",
+   "            1.0%          397.5",
+   "            5.0%          888.8",
+   "           10.0%         1257.0",
+   "  Impact depends on size relative to daily volume, not on how long",
+   "  you take. Trading the same order more slowly does not reduce it.",
+   "WHAT THE DATA SUPPORTS",
+   "======================",
+   "  - Volatility is 49.7% annualised, currently at the 43% percentile of its own history.",
+   "  - Returns are fat-tailed (excess kurtosis 6.4), so size positions on CVaR rather than on standard deviation.",
+   "  - Volatility shocks decay with a 8-day half-life, so a volatility spike is informative about roughly the next month.",
+   "  - The historical Sharpe ratio of 1.01 IS statistically distinguishable from zero over this sample.",
+   "  - Returns load significantly on market, rates_10y, credit_hy, leaving 53% idiosyncratic.",
+   "  - None of 9 standard signals predicts this instrument after correcting for multiple testing.",
+   "  NOT established by this report:",
+   "  - anything about the future; every number above is descriptive",
+   "  - fundamental value, earnings quality, or anything not in the price",
+   "  - liquidity, borrow availability, or capacity",
+   "  This is not investment advice."
+  ],
+  "seconds": 1.8605261250631884
+ },
+ {
+  "command": "quantos plan --years 10 --volatility 0.15",
+  "caption": "the projection, and its distribution",
+  "lines": [
+   "... 16 lines omitted ...",
+   "  This assumes the return is exactly the same every single year, which it never is. See simulate_plan for what volatility does to the same plan.",
+   "20,000 simulated paths, 6.0% expected return, 15.0% volatility, 10 years",
+   "  fixed-rate projection         198,290",
+   "    5th percentile             114,736",
+   "   10th percentile             127,602",
+   "   25th percentile             152,162",
+   "   50th percentile             187,439  <- median",
+   "   75th percentile             232,706",
+   "   90th percentile             284,372",
+   "   95th percentile             322,066",
+   "  probability of reaching 198,290: 43.1%",
+   "  The fixed-rate projection of 198,290 is not the expected outcome: it is roughly the 56th percentile. The median is 187,439, 5% lower, because compounding is multiplicative and averaging the rate is not the same as averaging the result.",
+   "  returns are drawn independently each period; real returns are close to independent monthly but not exactly, and this says nothing about the chance that the expected return itself is wrong"
+  ],
+  "seconds": 0.10606241703499109
+ },
+ {
+  "command": "python scripts/verify_claims.py",
+  "caption": "every documented number, re-derived",
+  "lines": [
+   "... 25 lines omitted ...",
+   "  ok    the runtime imports nothing but NumPy  [0.3s]",
+   "          no unguarded third-party import beyond NumPy in the runtime",
+   "  ok    every documented gallery figure exists  [0.0s]",
+   "          13 figures, all present",
+   "  ok    the disclaimer appears on every rendered page  [0.0s]",
+   "          present on landing and error pages",
+   "  ok    the schedule reproduces Calculator.net's published figures to the cent  [0.0s]",
+   "          worst year-end difference across ten years: $0.0044",
+   "  ok    the fixed-rate projection sits above the median outcome, not at it  [0.1s]",
+   "          projection $198,290; median $187,127; reached 42.6% of the time",
+   "17 verified, 0 skipped, 0 failed"
+  ],
+  "seconds": 101.73644241702277
+ }
+]

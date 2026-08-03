@@ -1,60 +1,143 @@
 # QuantOS
 
+**Institutional-grade quantitative research on any listed security. One
+dependency. Every number checked by CI — including the ones that came out badly.**
+
 [![CI](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml/badge.svg)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
 [![site](https://github.com/danielboulan10/QuantOS/actions/workflows/site.yml/badge.svg)](https://danielboulan10.github.io/QuantOS/)
 [![forward testing](https://github.com/danielboulan10/QuantOS/actions/workflows/forward.yml/badge.svg)](forward/RECORD.md)
-[![tests](https://img.shields.io/badge/tests-884%20passing-brightgreen)](tests/)
-[![mutation score](https://img.shields.io/badge/mutation%20score-50%25-orange)](docs/TEST_QUALITY.md)
+[![tests](https://img.shields.io/badge/tests-932%20passing-brightgreen)](tests/)
+[![mutation score](https://img.shields.io/badge/mutation%20score-53%25-orange)](docs/TEST_QUALITY.md)
 [![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
+[![claims verified](https://img.shields.io/badge/documented%20claims-17%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
 [![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
-[![coverage](https://img.shields.io/badge/coverage-78%25-yellowgreen)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
-[![claims verified](https://img.shields.io/badge/documented%20claims-15%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
 
-### → **[Try it: danielboulan10.github.io/QuantOS](https://danielboulan10.github.io/QuantOS/)**
+### → **[Open the live app: danielboulan10.github.io/QuantOS](https://danielboulan10.github.io/QuantOS/)**
 
-**Type a ticker. Get a full quantitative research report.**
+[Architecture](docs/ARCHITECTURE.md) · [Roadmap](ROADMAP.md) ·
+[Changelog](CHANGELOG.md) · [Methodology](docs/MATH.md) ·
+[Forward record](forward/RECORD.md) · [Research](docs/research/)
 
-![The forward distribution](docs/gallery/forward_fan.svg)
+---
 
-*400 bars of history, then 20,000 simulated forward paths shown as quantile bands.
-The forecast is the spread, not a line — and the median sits flat because expected
-return cannot be estimated over this horizon to any useful precision. Saying so is
-the point.*
+## What is this?
 
-```bash
-quantos serve                      # a search bar in your browser
-quantos research --ticker NVDA     # or straight from the terminal
-```
-
-No API key, no data file, no account. Any listed symbol — US equities, ETFs,
-indices, foreign listings, crypto — resolves to ten years of split- and
-dividend-adjusted history and runs through the whole pipeline: return
-distribution and tail behaviour, risk and drawdown, GARCH volatility dynamics,
+Type a ticker. Get the analysis a quantitative research desk would run: return
+distribution and tail behaviour, GARCH volatility dynamics with a forecast,
 regime detection, factor exposures with HAC standard errors, a pre-registered
-signal battery corrected for multiple testing, an option strike ladder with full
-Greeks, and square-root execution costs.
+signal battery corrected for multiple testing, a 20,000-path forward
+distribution, an option strike ladder with the full Greek set, and square-root
+execution costs.
 
-**One runtime dependency: NumPy.** Every special function, distribution,
-statistical test, optimiser, root finder, chart and data feed is implemented in
-this repository and validated against SciPy — which appears *only* as a
-test-time oracle, enforced by a CI job that installs without it. The reasoning is
-in [DDR-002](docs/ddr/DDR-002-numpy-only-runtime.md).
+[![The research report](docs/screenshots/report.png)](https://danielboulan10.github.io/QuantOS/)
+
+## Why is it useful?
+
+Three things separate this from a stock dashboard.
+
+**It reports what it cannot do.** The forward view is a distribution, not a
+line, because over 160 trading days expected return cannot be estimated to useful
+precision — drawing a median that slopes upward would be a claim the data does
+not support. Every signal is judged only after correcting for the fact that
+several were tried. Direction comes back as a coin flip, and the page says so.
+
+**Its own failures are published.** Seven measurements were kept when they came
+out badly, and CI fails if any of them quietly changes:
+
+| Finding | |
+|---|---|
+| **No** standard VaR model passes on SPY — the best delivers 1.55% breaches against a promised 1% | [VaR backtest](docs/VAR_BACKTEST.md) |
+| A NumPy attention model **loses** to GARCH, and CI fails if it ever starts winning | [leaderboard](docs/MODEL_LEADERBOARD.md) |
+| Forecast probabilities have real skill for ordinary moves and **none** for rare ones | [calibration](src/quantos/forecast/calibration.py) |
+| Heston's own 1993 formulation overprices by **93%** at T=5, silently | [Heston](src/quantos/derivatives/heston.py) |
+| The market simulation does **not** reliably discover its own fundamental — mean correlation 0.29, sd 0.48 | [below](#what-this-is-concretely) |
+| Almgren-Chriss **misranks** execution schedules when permanent impact is schedule-dependent | [execution](src/quantos/execution/backtest.py) |
+| Mutation testing found a module scoring **0%** — no test file existed | [test quality](docs/TEST_QUALITY.md) |
+| The retirement number every calculator prints is reached only **43%** of the time | [calculator](src/quantos/planning/calculator.py) |
+
+**Nothing is imported that could be checked.** One runtime dependency: NumPy.
+Every special function, distribution, statistical test, optimiser, root finder,
+chart and data feed is implemented in this repository. SciPy appears *only* as a
+test-time oracle, enforced by a CI job that installs without it. Reasoning:
+[DDR-002](docs/ddr/DDR-002-numpy-only-runtime.md).
+
+Predictions are also written to an [append-only, hash-chained
+ledger](forward/RECORD.md) *before* the outcome is known, updated daily in CI, so
+a forecast cannot be quietly revised after the fact.
+
+## Can I run it?
+
+Yes — in about thirty seconds, with no API key, no data file and no account.
 
 ```bash
+git clone https://github.com/danielboulan10/QuantOS && cd QuantOS
 pip install -e ".[test]"
 
-quantos serve                             # search bar at localhost:8000
-quantos research --ticker AAPL            # any listed symbol, no key required
-quantos research --ticker ^GSPC           # indices, crypto (BTC-USD), LSE (VOD.L)
-quantos research --csv my_prices.csv      # or your own file
-quantos research --series spx             # or anything on FRED
+quantos serve                       # search bar at localhost:8000
+quantos research --ticker NVDA      # or straight from the terminal
+```
+
+Any listed symbol resolves to ten years of split- and dividend-adjusted history:
+US equities, ETFs, indices (`^GSPC`), foreign listings (`VOD.L`), crypto
+(`BTC-USD`). Or bring your own data.
+
+<details>
+<summary><b>Every command</b></summary>
+
+```bash
+quantos research  --ticker AAPL           # any listed symbol, no key required
+quantos research  --csv my_prices.csv     # or your own file
+quantos research  --series spx            # or anything on FRED
+quantos plan      --volatility 0.15       # investment projection + its distribution
 quantos forward   --ticker SPY            # record predictions, scored later
 quantos surface   --chain chain.csv       # SVI vol surface, variance risk premium
 quantos intraday  --csv ticks.csv         # noise-corrected realised volatility
+quantos options   --spot 100 --strike 105 # prices, Greeks, implied vol
+quantos portfolio                         # construction, out of sample
+quantos execution                         # Almgren-Chriss frontier
+quantos validate                          # overfitting controls
+quantos simulate                          # agent-based market
+quantos book                              # order book throughput + invariants
 quantos demo                              # tour every subsystem, ~2 minutes
-pytest                                    # 627 tests, incl. every docstring example
+quantos doctor                            # environment check
+pytest                                    # 932 tests, incl. every docstring example
 ```
+</details>
+
+## Watch it run
+
+![Recorded terminal session](docs/demo.svg)
+
+*Not a screen recording. [`scripts/record_demo.py`](scripts/record_demo.py) runs
+the commands, captures what they actually printed, measures how long they
+actually took, and replays that as an SVG — so the demo cannot drift away from
+the software the way a video does. Re-run it after a change and it is current, or
+it fails.*
+
+## What it looks like
+
+| | |
+|---|---|
+| [![search](docs/screenshots/search.png)](https://danielboulan10.github.io/QuantOS/) | [![calculator](docs/screenshots/calculator.png)](https://danielboulan10.github.io/QuantOS/calculator.html) |
+| **Search** — any listed symbol | **Planning** — and the 43% the projection hides |
+
+![The forward distribution](docs/gallery/forward_fan.svg)
+
+*400 bars of history, then 20,000 simulated forward paths shown as quantile
+bands. The forecast is the spread, not a line — and the median sits flat because
+expected return cannot be estimated over this horizon to any useful precision.
+Saying so is the point.*
+
+## How it fits together
+
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full diagram. In short: a
+dependency-free numerical core, a research layer built on it that reports its own
+limits, and three CI mechanisms that stop the documentation drifting away from
+the code — a hash-chained forward ledger, seventeen re-derived claims, and
+mutation testing that grades whether the tests are load-bearing at all.
+
+---
 
 ## The search bar
 
@@ -302,22 +385,6 @@ a case whose true volatility is 15%. `erfc`'s branch points are chosen by
 iteration because the textbook fixed point oscillates.
 
 ---
-
-## Results this repository publishes against itself
-
-The unusual thing here is not the volume of code. It is that the measurements
-were kept when they came out badly:
-
-| Finding | Where |
-|---|---|
-| The market simulation does **not** reliably discover its own fundamental — mean correlation 0.29, sd 0.48 | [README below](#what-this-is-concretely) |
-| A NumPy attention model **loses** to GARCH, and CI fails if it ever starts winning | [leaderboard](docs/MODEL_LEADERBOARD.md) |
-| Forecast probabilities have real skill for ordinary moves and **none** for rare ones | [calibration](src/quantos/forecast/calibration.py) |
-| **No** standard VaR model passes on SPY; the best delivers 1.55% against a promised 1% | [VaR backtest](docs/VAR_BACKTEST.md) |
-| Mutation testing found a module scoring **0%** — no test file existed | [test quality](docs/TEST_QUALITY.md) |
-| Almgren-Chriss **misranks** execution schedules when permanent impact is schedule-dependent | [execution backtest](src/quantos/execution/backtest.py) |
-| Heston's own 1993 formulation overprices by **93%** at T=5, silently | [Heston](src/quantos/derivatives/heston.py) |
-| The retirement number every calculator prints is reached only **43%** of the time | [calculator](src/quantos/planning/calculator.py) |
 
 ## Every number in this README is checked by CI
 

@@ -90,6 +90,22 @@ jobs:
           name: coverage-xml
           path: coverage.xml
 
+  docs:
+    # The README makes specific promises -- a demo, screenshots, an
+    # architecture diagram. A broken link or a stale demo is a wrong claim, so
+    # it is checked like every other claim here.
+    name: docs and demo are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -e ".[test]"
+      - name: every file the README links to exists
+        run: python scripts/check_links.py
+      - name: the recorded demo matches the current version
+        run: pytest tests/scripts -q
+
   lint:
     name: ruff + mypy
     runs-on: ubuntu-latest
