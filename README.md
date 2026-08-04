@@ -112,6 +112,21 @@ pytest                                    # 1,038 tests, incl. every docstring e
 ```
 </details>
 
+## Published research
+
+Three working notes, written from results this repository produced. Every number
+in them is re-derived by CI on every push, so a note cannot drift away from the
+code it describes.
+
+| | Note | Result |
+|---|---|---|
+| 001 | [Nothing survives an 840-factor search](docs/research/001-nothing-survives.md) | The best of 840 factors on SPY has t = 2.23 and survives no correction. Two defects in the search itself were more interesting than the search. |
+| 002 | [The stock–bond hedge is not a constant](docs/research/002-the-hedge-inverted.md) | It held in 2008 and 2020 and inverted in 2022. The statistic that would have shown this in advance is not the one usually reported. |
+| 003 | [A t-statistic of 8, with the sign wrong](docs/research/003-confidently-wrong.md) | A macro beta significant at every conventional level whose direction reversed in the regime that followed. |
+
+All three are negative results. That is not a selection: they are what the work
+produced.
+
 ## Watch it run
 
 ![Recorded terminal session](docs/demo.svg)
