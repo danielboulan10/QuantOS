@@ -8,6 +8,53 @@ changes here are ones where the measurement came out badly and was kept.
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-08-03
+
+### Added
+- **Factor research lab** ([`research/factor_lab.py`](src/quantos/research/factor_lab.py)).
+  840 factors from a grammar, then the multiple-testing machinery applied to the
+  whole search rather than to the winner. `quantos factors`.
+- **Historical stress testing** ([`risk/stress.py`](src/quantos/risk/stress.py))
+  against 2008, COVID, 2022 and the 2023 banking episode, with survivorship
+  refused rather than papered over. `quantos stress`.
+- **Scenario engine** ([`risk/scenario.py`](src/quantos/risk/scenario.py)):
+  macro shocks answered as a range, with HAC intervals. `quantos scenario`.
+- **Lattice option pricing** ([`derivatives/lattice.py`](src/quantos/derivatives/lattice.py)):
+  CRR binomial and Boyle trinomial. `quantos lattice`.
+- **Three research notes** in [`docs/research/`](docs/research/).
+- Architecture diagrams, real screenshots, a self-invalidating recorded demo,
+  a link checker in CI, and release tags back to v1.0.0.
+- Claims verified in CI: 15 → **24**.
+
+### Results kept because they were unflattering
+- **Nothing survives an 840-factor search on SPY.** Best t = 2.23; 104 of 840
+  clear a naive p < 0.05 against 42 expected. Zero survivors.
+- **The stock–bond hedge inverted in 2022** — TLT −31.2% against SPY −24.1%,
+  correlation −0.40 → +0.03. It held and tightened in 2008 and 2020.
+- **A macro beta with t = 8.15 had the sign wrong** for the regime that
+  followed: QQQ's rate beta was +8 to +9 across four consecutive periods
+  2006–2021, then −2.8 through the 2022 hiking cycle.
+- **The published Longstaff-Schwartz value is 0.0087 low**, which is the
+  downward bias LSMC's own theory predicts. Measured against a converged lattice.
+
+### Fixed
+- The factor comparison ranked **leverage, not skill** — a 1,900× spread in P&L
+  scale meant the max-of-means statistic compared position sizes. Found by a
+  planted-signal test; the true factor had ranked 143rd of 200.
+- The deflated Sharpe was fed annualised variance while working in per-period
+  units (252×), returning p = 1.0000 on a t = 11.4 signal. Fixing the units
+  exposed a deeper issue: the deflation treats the trial spread as pure noise, so
+  real skill inflates the benchmark. Both variants are now reported.
+- Correlation was summarised by a single average that **moved the wrong way**
+  through the GFC. Replaced with the decomposition.
+- The scenario engine's first factor was a bond ETF return, which is not
+  identified — it mixes the discount-rate channel with flight to quality and
+  reverses the apparent sign. Replaced with the actual Treasury yield.
+
+### Changed
+- Mutation scores: lattice **100%** (first module to reach it), stress 24% → 68%,
+  factor lab 36% → 56%, calculator 56% → 84%.
+
 ## [1.4.0] — 2026-08-03
 
 ### Added
@@ -151,7 +198,8 @@ Initial public release.
 - GARCH/GJR-GARCH MLE, exact OU estimation, Engle-Granger and Johansen
   cointegration, OLS with HAC standard errors.
 
-[Unreleased]: https://github.com/danielboulan10/QuantOS/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/danielboulan10/QuantOS/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/danielboulan10/QuantOS/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/danielboulan10/QuantOS/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/danielboulan10/QuantOS/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/danielboulan10/QuantOS/compare/v1.1.0...v1.2.0

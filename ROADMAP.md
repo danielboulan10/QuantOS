@@ -22,39 +22,32 @@ Dates are targets, not commitments. Items move to the
 | ✅ | Backtest validation: deflated Sharpe, PBO, purged and combinatorial CV, Reality Check / SPA / StepM |
 | ✅ | Static site and PWA, rebuilt daily |
 | ✅ | Investment calculator matched to a published schedule, with the distribution it hides |
+| ✅ | Factor research lab — 840 factors, corrected for the size of the search |
+| ✅ | Historical stress testing against 2008, COVID, 2022, with survivorship refused |
+| ✅ | Scenario engine answering macro shocks as a range, and flagging false precision |
+| ✅ | Lattice option pricing — a fourth independent route to the same number |
+| ✅ | Three published research notes, all negative results |
 | ✅ | Mutation testing and claim verification in CI |
 
 ## In progress
 
-### Factor research lab — *the data-mining trap, demonstrated*
-Generate on the order of a thousand systematic factors, test every one, and then
-run the multiple-testing machinery already in this repository over the results.
-The expected outcome is that the best factor found is **not** significant once
-the search is accounted for. That is the point: a lab that publishes the winner
-without the correction is producing noise, and this one will show the arithmetic
-of why.
+### SEC filing analysis, the deterministic way
+A structural diff of risk-factor sections between consecutive 10-K filings, and
+tone scored with the Loughran-McDonald finance lexicon. Reproducible, auditable,
+and with published accuracy — see *Ruled out* below for why this rather than an
+LLM summary.
 
-### Portfolio stress testing against real crises
-Replay a portfolio through dated windows — 2008, the COVID crash, the dot-com
-unwind, 2022 inflation, the 2023 regional banking episode — and report drawdown,
-time to recovery, worst single day, and the correlation breakdown that makes
-diversification fail exactly when it is needed. Historical windows, not
-hypotheticals.
+### Cross-sectional factor research
+The [factor lab](src/quantos/research/factor_lab.py) currently searches one
+instrument at a time, and note [001](docs/research/001-nothing-survives.md) says
+plainly that a single series over 2,237 observations is too short to support a
+discovery. A cross-section of several hundred names is the natural next step and
+changes what the search can conclude.
 
-### Lattice option pricing
-CRR binomial and trinomial trees from scratch, to sit beside the existing
-closed-form, Fourier and Monte Carlo methods. Four independent routes to the same
-number is a stronger validation than any single one.
-
-### Scenario engine
-"What happens if rates fall 100bps" answered from historical factor betas with
-HAC standard errors — and reported as a range with its uncertainty attached,
-because a point estimate for a macro shock is a fiction.
-
-### Research notes
-Written from results this repository actually produced, not chosen topics.
-Method, data, result, limitations. The first four are already sitting in the
-codebase waiting to be written up.
+### Detecting a regime break as it happens
+Note [003](docs/research/003-confidently-wrong.md) detects that breaks have
+occurred. Detecting one *while* it happens is a much harder and much more useful
+problem — and one where a negative result would be worth as much as a positive.
 
 ## Considered and deferred
 

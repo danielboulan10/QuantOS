@@ -5,14 +5,14 @@
   "lines": [
    "QuantOS environment check",
    "=========================",
-   "quantos              1.4.0",
+   "quantos              1.5.0",
    "python               3.12.13",
    "numpy                2.5.1",
    "scipy                1.18.0  (test-only oracle, not a runtime dependency)",
    "Module import check",
-   "... 88 more lines ..."
+   "... 92 more lines ..."
   ],
-  "seconds": 0.19714604201726615
+  "seconds": 0.4231518330052495
  },
  {
   "command": "quantos research --ticker NVDA",
@@ -42,46 +42,64 @@
    "  - liquidity, borrow availability, or capacity",
    "  This is not investment advice."
   ],
-  "seconds": 1.8605261250631884
+  "seconds": 1.9273884169524536
  },
  {
-  "command": "quantos plan --years 10 --volatility 0.15",
-  "caption": "the projection, and its distribution",
+  "command": "quantos stress --ticker SPY",
+  "caption": "replayed through crises that happened",
   "lines": [
-   "... 16 lines omitted ...",
-   "  This assumes the return is exactly the same every single year, which it never is. See simulate_plan for what volatility does to the same plan.",
-   "20,000 simulated paths, 6.0% expected return, 15.0% volatility, 10 years",
-   "  fixed-rate projection         198,290",
-   "    5th percentile             114,736",
-   "   10th percentile             127,602",
-   "   25th percentile             152,162",
-   "   50th percentile             187,439  <- median",
-   "   75th percentile             232,706",
-   "   90th percentile             284,372",
-   "   95th percentile             322,066",
-   "  probability of reaching 198,290: 43.1%",
-   "  The fixed-rate projection of 198,290 is not the expected outcome: it is roughly the 56th percentile. The median is 187,439, 5% lower, because compounding is multiplicative and averaging the rate is not the same as averaging the result.",
-   "  returns are drawn independently each period; real returns are close to independent monthly but not exactly, and this says nothing about the chance that the expected return itself is wrong"
+   "SPY (State Street SPDR S&P 500 ETF Trust) [etf on NYSEArca in USD]",
+   "HISTORICAL STRESS TEST -- data from 2006-08-04 to 2026-08-03",
+   "==============================================================================",
+   "  dot-com unwind             NOT TESTABLE -- history does not reach this window",
+   "  global financial crisis     -55.2% drawdown   worst day  -9.8%   vol x2.9   869d to recover",
+   "  COVID crash                 -33.7% drawdown   worst day -10.9%   vol x6.4   97d to recover",
+   "  2022 inflation shock        -24.5% drawdown   worst day  -4.3%   vol x1.9   294d to recover",
+   "  regional banking crisis      -4.7% drawdown   worst day  -1.8%   vol x0.7   191d to recover",
+   "  Worst experienced: global financial crisis, -55.2% peak to trough.",
+   "  4 of 5 windows testable.",
+   "  1 of 5 windows are not testable on this history. They are listed rather than dropped: a window silently omitted reads as a window that was survived.",
+   "  A historical replay assumes the position was held throughout. It does not model margin calls, redemptions, borrow being pulled, or the decision to sell at the bottom -- which is what actually converts a drawdown into a loss."
   ],
-  "seconds": 0.10606241703499109
+  "seconds": 0.08788445801474154
+ },
+ {
+  "command": "quantos factors --n-factors 200",
+  "caption": "840 factors, corrected for the search",
+  "lines": [
+   "... 7 lines omitted ...",
+   "  Sharpe   0.68    t =  1.91    naive p = 0.0564",
+   "  1 of 200 factors clear p < 0.05 on their own.",
+   "  Pure chance predicts about 10.",
+   "Corrected for the size of the search:",
+   "  White's Reality Check   p = 0.7820",
+   "  Hansen's SPA            p = 0.8020",
+   "  Deflated Sharpe         p = 0.6867   (null variance: 0.8037)",
+   "  VERDICT: no factor survives the correction.",
+   "  Searching 200 factors and reporting the best without correction would have produced a Sharpe of 0.68 (t = 1.91).",
+   "  The corrected tests above ask a different question: whether ANY factor in the searched universe has skill, given that the best of many was selected.",
+   "  Nothing survives. That is the expected outcome of a search this size over a series this short, and it is the result -- not a failure to find one.",
+   "  Harvey, Liu & Zhu (2016) argue that t > 3.0 is the right bar for a published factor once the profession's collective search is counted. This search alone was 200 wide."
+  ],
+  "seconds": 8.654164334060624
  },
  {
   "command": "python scripts/verify_claims.py",
   "caption": "every documented number, re-derived",
   "lines": [
-   "... 25 lines omitted ...",
-   "  ok    the runtime imports nothing but NumPy  [0.3s]",
-   "          no unguarded third-party import beyond NumPy in the runtime",
-   "  ok    every documented gallery figure exists  [0.0s]",
-   "          13 figures, all present",
-   "  ok    the disclaimer appears on every rendered page  [0.0s]",
-   "          present on landing and error pages",
-   "  ok    the schedule reproduces Calculator.net's published figures to the cent  [0.0s]",
-   "          worst year-end difference across ten years: $0.0044",
-   "  ok    the fixed-rate projection sits above the median outcome, not at it  [0.1s]",
-   "          projection $198,290; median $187,127; reached 42.6% of the time",
-   "17 verified, 0 skipped, 0 failed"
+   "... 39 lines omitted ...",
+   "  ok    the stock-bond hedge inverted in 2022, and held in 2008 and 2020  [0.0s]",
+   "          2022: -0.40 -> +0.03 (hedge inverted); GFC: -0.18 -> -0.47 (hedge held)",
+   "  ok    an instrument listed mid-crisis is refused rather than given a shallow number  [0.0s]",
+   "          25% of the GFC window present, correctly refused: history begins 2008-11-01, after the crisis started 2007-10-...",
+   "  ok    four independent pricing methods agree on the same American put  [0.3s]",
+   "          binomial 4.4867, trinomial 4.4863, LSMC bracket [4.4526, 4.9887]; published 4.478 sits +0.0087 below the lattice",
+   "  ok    binomial convergence oscillates, and the trinomial lattice does not  [0.1s]",
+   "          over 121 step counts the binomial error changes sign 82 times, the trinomial 2",
+   "  ok    a significant macro beta can still have the sign wrong for what comes next  [0.1s]",
+   "          beta +5.71 (t = 8.15), 90% interval [+4.55%, +6.86%] excludes zero, subsamples span [-1.70%, +9.12%]",
+   "24 verified, 0 skipped, 0 failed"
   ],
-  "seconds": 101.73644241702277
+  "seconds": 110.76834845799021
  }
 ]

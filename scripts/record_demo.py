@@ -47,7 +47,8 @@ Step = tuple[str, int, str]
 SCRIPT: list[Step] = [
     ("quantos doctor", -7, "86 modules, one runtime dependency"),
     ("quantos research --ticker NVDA", 22, "any listed symbol, no API key"),
-    ("quantos plan --years 10 --volatility 0.15", 13, "the projection, and its distribution"),
+    ("quantos stress --ticker SPY", 12, "replayed through crises that happened"),
+    ("quantos factors --n-factors 200", 12, "840 factors, corrected for the search"),
     ("python scripts/verify_claims.py", 11, "every documented number, re-derived"),
 ]
 
