@@ -6,7 +6,7 @@ dependency. Every number checked by CI — including the ones that came out badl
 [![CI](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml/badge.svg)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
 [![site](https://github.com/danielboulan10/QuantOS/actions/workflows/site.yml/badge.svg)](https://danielboulan10.github.io/QuantOS/)
 [![forward testing](https://github.com/danielboulan10/QuantOS/actions/workflows/forward.yml/badge.svg)](forward/RECORD.md)
-[![tests](https://img.shields.io/badge/tests-1038%20passing-brightgreen)](tests/)
+[![tests](https://img.shields.io/badge/tests-1085%20passing-brightgreen)](tests/)
 [![mutation score](https://img.shields.io/badge/mutation%20score-55%25-orange)](docs/TEST_QUALITY.md)
 [![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
 [![claims verified](https://img.shields.io/badge/documented%20claims-24%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
@@ -15,8 +15,8 @@ dependency. Every number checked by CI — including the ones that came out badl
 
 ### → **[Open the live app: danielboulan10.github.io/QuantOS](https://danielboulan10.github.io/QuantOS/)**
 
-[Architecture](docs/ARCHITECTURE.md) · [Roadmap](ROADMAP.md) ·
-[Changelog](CHANGELOG.md) · [Methodology](docs/MATH.md) ·
+[Architecture](docs/ARCHITECTURE.md) · [Engineering audit](docs/ENGINEERING_REPORT.md) ·
+[Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md) · [Methodology](docs/MATH.md) ·
 [Forward record](forward/RECORD.md) · [Research](docs/research/)
 
 ---
@@ -75,11 +75,22 @@ Yes — in about thirty seconds, with no API key, no data file and no account.
 
 ```bash
 git clone https://github.com/danielboulan10/QuantOS && cd QuantOS
-pip install -e ".[test]"
+make setup                          # clean checkout to working environment
+make demo                           # tour every subsystem, ~2 minutes
+```
 
+Or without `make`:
+
+```bash
+pip install -e ".[test]"
 quantos serve                       # search bar at localhost:8000
 quantos research --ticker NVDA      # or straight from the terminal
 ```
+
+`make check` runs exactly what CI runs — lint, types, tests, claim
+verification, link checking — so a green local run means a green pipeline.
+There is a [devcontainer](.devcontainer/devcontainer.json) and a
+[container image](Dockerfile) built and tested in CI.
 
 Any listed symbol resolves to ten years of split- and dividend-adjusted history:
 US equities, ETFs, indices (`^GSPC`), foreign listings (`VOD.L`), crypto
@@ -108,7 +119,7 @@ quantos simulate                          # agent-based market
 quantos book                              # order book throughput + invariants
 quantos demo                              # tour every subsystem, ~2 minutes
 quantos doctor                            # environment check
-pytest                                    # 1,038 tests, incl. every docstring example
+pytest                                    # 1,085 tests, incl. every docstring example
 ```
 </details>
 

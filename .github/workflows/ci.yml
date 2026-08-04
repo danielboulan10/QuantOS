@@ -90,6 +90,39 @@ jobs:
           name: coverage-xml
           path: coverage.xml
 
+  container:
+    # The Dockerfile is a claim that a clean machine can run this. Unverified,
+    # it is a claim that rots on the first dependency change -- so CI builds the
+    # image and runs the suite inside it rather than trusting that it still works.
+    name: container builds and passes its own tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: quantos:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: the packaged CLI works
+        run: docker run --rm quantos:ci quantos --version
+      - name: the runtime picked up no dependency beyond NumPy
+        run: |
+          docker run --rm quantos:ci python - <<'PY'
+          import importlib.metadata as md
+          installed = {d.metadata["Name"].lower() for d in md.distributions()}
+          # pip/setuptools/wheel ship with the base image; nothing else may.
+          allowed = {"quantos", "numpy", "pip", "setuptools", "wheel"}
+          extra = installed - allowed
+          assert not extra, f"unexpected packages in the runtime image: {sorted(extra)}"
+          print("runtime image contains only:", sorted(installed))
+          PY
+      - name: setup is one command from a clean checkout
+        run: make setup && make lint
+
   docs:
     # The README makes specific promises -- a demo, screenshots, an
     # architecture diagram. A broken link or a stale demo is a wrong claim, so

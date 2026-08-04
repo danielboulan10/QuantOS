@@ -28,14 +28,17 @@ import html
 import http.server
 import json
 import socketserver
-import traceback
 import urllib.parse
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
+from quantos.core.logging import get_logger
+
 __all__ = ["DISCLAIMER", "render_landing", "render_page", "serve"]
+
+_LOG = get_logger(__name__)
 
 #: Shown on every page, not just the landing page.
 #:
@@ -473,7 +476,12 @@ def render_page(ticker: str, *, link_style: LinkStyle = "dynamic") -> _Rendered:
     try:
         forward_html = _forecast_section(price, report, info)
     except Exception:
-        traceback.print_exc()
+        # Broad on purpose: one failing section must not take down a report that
+        # is otherwise complete, and the panel below names the missing part
+        # rather than leaving a gap. The traceback goes to the log so a degraded
+        # page is still diagnosable -- previously it went to stdout, where it
+        # interleaved with the HTML being served.
+        _LOG.exception("forward section failed for %s", info.ticker)
         forward_html = (
             '<div class="panel err">The forward distribution could not be simulated '
             "for this instrument; the historical analysis below is unaffected.</div>"
@@ -633,12 +641,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             rendered = render_page(ticker)
             self._send(rendered.status, rendered.body)
         except Exception:
-            traceback.print_exc()
+            # A handler that raises drops the connection with no explanation.
+            # Log the cause with its traceback, return a 500 the user can read.
+            _LOG.exception("request failed for ticker %r", ticker)
             self._send(
                 500,
                 render_landing(
-                    f"Something failed while analysing {ticker}. The traceback is in "
-                    "the terminal running the server."
+                    f"Something failed while analysing {ticker}. Run with "
+                    "--log-level debug to see the traceback."
                 ),
             )
 

@@ -1,0 +1,56 @@
+name: Bug report
+description: Something behaves differently from what the documentation says.
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every documented number in this repository is re-derived in CI. If you
+        found one that disagrees with the code, that is the most useful bug
+        report you can file — please say which claim.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: >
+        The smallest command or snippet that shows it. A ticker and a
+        subcommand is usually enough.
+      render: shell
+      placeholder: quantos research --ticker NVDA
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Output of `quantos doctor`.
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Data (market, FRED, factors, alignment)
+        - Numerical core (special functions, RNG, time series)
+        - Forecasting and calibration
+        - Derivatives (Black-Scholes, Heston, lattices, American)
+        - Risk (VaR, stress, scenario, portfolio)
+        - Research (factor lab, microstructure, vol surface)
+        - Execution and simulation
+        - CLI, web viewer, or docs
+        - Not sure
+    validations:
+      required: true

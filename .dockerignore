@@ -1,0 +1,19 @@
+# Everything the image does not need. Keeping this tight is what makes the
+# build cache useful and the image small.
+.git
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+htmlcov
+.coverage
+coverage.xml
+site/
+build/
+dist/
+*.egg-info
+docs/gallery/*.svg
+forward/
+.devcontainer

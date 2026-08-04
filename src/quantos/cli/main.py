@@ -22,6 +22,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from quantos import __version__
+from quantos.core.logging import configure_logging, get_logger
+from quantos.data.fred import FredError
+from quantos.data.market import MarketDataError
+
+_LOG = get_logger(__name__)
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -1070,55 +1075,39 @@ def cmd_intraday(args: argparse.Namespace) -> int:
     return 0
 
 
-#: FRED series used as macro factors, and how to turn each into a change series.
-_MACRO_FACTORS = {
-    "rates": ("DGS10", "yield"),
-    "credit": ("BAMLH0A0HYM2", "yield"),
-    "oil": ("DCOILWTICO", "level"),
-    "dollar": ("DTWEXBGS", "level"),
-}
-
-
 def cmd_scenario(args: argparse.Namespace) -> int:
     """Estimate macro sensitivities, then answer 'what happens if' as a range."""
+    from quantos.data.align import MACRO_FACTORS, coverage, factor_changes, simple_returns
     from quantos.data.fred import FredClient, FredError
     from quantos.data.market import fetch_prices
     from quantos.risk.scenario import SCENARIOS, apply_shock, estimate_response
 
     series, info = fetch_prices(args.ticker, range_key=args.range)
     dates = np.asarray(series.dates, dtype="datetime64[D]")
-    prices = np.asarray(series.prices, dtype=float)
-    returns = np.zeros(prices.size)
-    returns[1:] = np.diff(prices) / prices[:-1]
+    returns = simple_returns(series.prices)
 
     client = FredClient()
     factors: dict[str, ArrayLike] = {}
     for name in args.factors:
-        series_id, kind = _MACRO_FACTORS[name]
+        factor = MACRO_FACTORS[name]
         try:
-            macro = client.get(series_id)
+            macro = client.get(factor.series_id)
         except (FredError, OSError) as error:
+            _LOG.warning("skipping factor %s (%s): %s", name, factor.series_id, error)
             print(f"  skipping {name}: {error}")
             continue
 
-        # Align onto the instrument's own dates. Aligning the other way would
-        # truncate the instrument to the macro calendar and silently shorten the
-        # sample, which is the bug this repository already fixed once in
-        # data/factors.py.
-        position = {
-            date: i for i, date in enumerate(np.asarray(macro.dates, dtype="datetime64[D]"))
-        }
-        values = np.asarray(macro.values, dtype=float)
-        level = np.array([values[position[d]] if d in position else np.nan for d in dates])
+        macro_dates = np.asarray(macro.dates, dtype="datetime64[D]")
+        present = coverage(dates, macro_dates)
+        if present < 0.5:
+            print(
+                f"  skipping {name}: present on only {present:.0%} of "
+                f"{info.ticker}'s trading days, which would make the regression "
+                "a statement about different dates than it appears to be"
+            )
+            continue
 
-        change = np.full(dates.size, np.nan)
-        if kind == "yield":
-            # A yield is already in percent, so a difference is the move in
-            # percentage points; /100 puts it in the same decimal units as a shock.
-            change[1:] = np.diff(level) / 100.0
-        else:
-            change[1:] = np.diff(level) / level[:-1]
-        factors[name] = change
+        factors[name] = factor_changes(dates, macro_dates, macro.values, factor.kind)
 
     if not factors:
         print("no macro factors available; nothing to estimate")
@@ -1135,8 +1124,7 @@ def cmd_scenario(args: argparse.Namespace) -> int:
     print(response.summary())
     print()
 
-    chosen = [s for s in SCENARIOS if set(s.shocks) <= set(factors)]
-    for scenario in chosen:
+    for scenario in (s for s in SCENARIOS if set(s.shocks) <= set(factors)):
         print(apply_shock(response, scenario.shocks, name=scenario.name).summary())
         print()
     return 0
@@ -1192,6 +1180,7 @@ def cmd_stress(args: argparse.Namespace) -> int:
     """Replay an instrument through crises that actually happened."""
     import numpy as np
 
+    from quantos.data.align import align_to_grid, simple_returns
     from quantos.data.market import fetch_prices
     from quantos.risk.stress import CRISES, correlation_breakdown, stress_test
 
@@ -1212,16 +1201,8 @@ def cmd_stress(args: argparse.Namespace) -> int:
     returns: dict[str, ArrayLike] = {}
     for symbol in [args.ticker, *args.against]:
         other, _ = fetch_prices(symbol, range_key=args.range)
-        other_dates = np.asarray(other.dates, dtype="datetime64[D]")
-        other_prices = np.asarray(other.prices, dtype=float)
-        aligned = np.full(dates.size, np.nan)
-        shared = np.isin(dates, other_dates)
-        aligned[shared] = np.interp(
-            dates[shared].astype(float), other_dates.astype(float), other_prices
-        )
-        step = np.zeros(dates.size)
-        step[1:] = np.diff(aligned) / aligned[:-1]
-        returns[symbol] = np.nan_to_num(step)
+        aligned = align_to_grid(dates, np.asarray(other.dates, dtype="datetime64[D]"), other.prices)
+        returns[symbol] = np.nan_to_num(simple_returns(aligned))
 
     print()
     for crisis in CRISES:
@@ -1418,6 +1399,16 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="Every subcommand is deterministic given --seed.",
     )
     parser.add_argument("--version", action="version", version=f"quantos {__version__}")
+    parser.add_argument(
+        "--log-level",
+        default=None,
+        choices=["debug", "info", "warning", "error"],
+        help=(
+            "diagnostic detail on stderr; defaults to QUANTOS_LOG_LEVEL, then "
+            "warning. Use debug to see cache hits, fetch timings and why a "
+            "factor was skipped."
+        ),
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("demo", help="short tour of every subsystem")
@@ -1567,6 +1558,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--compare", default=None, help="second intraday file, for the Epps curve")
     p.set_defaults(func=cmd_intraday)
 
+    from quantos.data.align import MACRO_FACTORS
+
     p = sub.add_parser("scenario", help="what happens if rates fall 100bps, as a range")
     p.add_argument("--ticker", required=True)
     p.add_argument("--range", default="20y")
@@ -1574,7 +1567,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--factors",
         nargs="*",
         default=["rates"],
-        choices=sorted(_MACRO_FACTORS),
+        choices=sorted(MACRO_FACTORS),
         help="macro factors to estimate sensitivities to",
     )
     p.set_defaults(func=cmd_scenario)
@@ -1632,14 +1625,31 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry point for the ``quantos`` console script."""
+    """Entry point for the ``quantos`` console script.
+
+    The CLI is the application, so it is the one place in this package that
+    configures logging -- a library that does so at import steals the root
+    logger from whatever imported it.
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # Logs go to stderr, so a report on stdout stays pipeable.
+    configure_logging(getattr(args, "log_level", None))
+    _LOG.debug("running %s", getattr(args, "command", "?"))
+
     try:
         return int(args.func(args))
     except KeyboardInterrupt:  # pragma: no cover
         print("\ninterrupted", file=sys.stderr)
         return 130
+    except (MarketDataError, FredError) as error:
+        # A data failure is the common one and is not a bug. Report it as a
+        # message rather than a traceback, which tells the user nothing they
+        # can act on, and log the detail for anyone who wants it.
+        _LOG.debug("data error", exc_info=True)
+        print(f"\ncould not fetch data: {error}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":  # pragma: no cover

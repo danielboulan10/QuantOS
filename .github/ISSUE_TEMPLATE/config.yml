@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/danielboulan10/QuantOS/discussions
+    about: Ask about methodology, propose research, or discuss an approach.
+  - name: Security issue
+    url: https://github.com/danielboulan10/QuantOS/security/policy
+    about: Report privately. Please do not open a public issue.

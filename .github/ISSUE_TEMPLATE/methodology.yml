@@ -1,0 +1,36 @@
+name: Methodology challenge
+description: You think a method, assumption, or published result here is wrong.
+labels: ["methodology", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most valuable issue type in this repository. Several
+        published results here are negative, and CI fails if any of them
+        changes — so if one is wrong, the correction is a real contribution.
+
+  - type: textarea
+    id: claim
+    attributes:
+      label: The claim you are challenging
+      description: Quote it, and link the file or research note it appears in.
+    validations:
+      required: true
+
+  - type: textarea
+    id: argument
+    attributes:
+      label: Why you think it is wrong
+      description: >
+        A reference, a counter-example, or a derivation. "It looks off" is a
+        fine starting point but harder to act on.
+    validations:
+      required: true
+
+  - type: textarea
+    id: check
+    attributes:
+      label: What check would settle it
+      description: >
+        The bar for a change here is the same as for everything else: a claim
+        needs a check that fails when the claim becomes false.

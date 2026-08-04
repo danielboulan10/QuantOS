@@ -1,0 +1,33 @@
+name: Feature or research proposal
+description: Something QuantOS should be able to do and cannot.
+labels: ["enhancement", "needs triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What analysis are you trying to do? Please describe the question rather
+        than the feature — the useful version is often not the one first
+        imagined.
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: How would we know it works
+      description: >
+        A published benchmark, a closed form, an identity, or a case where the
+        answer is known. Anything added here has to be checkable against
+        something independent.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: I have read ROADMAP.md, including the "Ruled out" section.
+        - label: This can be implemented with NumPy alone (see DDR-002).

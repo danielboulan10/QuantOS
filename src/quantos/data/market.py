@@ -84,6 +84,7 @@ from typing import Any
 
 import numpy as np
 
+from quantos.core.logging import get_logger, log_duration
 from quantos.data.loader import PriceSeries
 
 __all__ = [
@@ -93,6 +94,8 @@ __all__ = [
     "default_cache_dir",
     "fetch_prices",
 ]
+
+_LOG = get_logger(__name__)
 
 _CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
 _USER_AGENT = "Mozilla/5.0 (compatible; quantos/1.0; +https://github.com/danielboulan10/QuantOS)"
@@ -241,6 +244,7 @@ class MarketDataClient:
         if use_cache:
             assert cached is not None
             payload, source = cached, f"cache ({cache_age / 3600:.1f}h old)"
+            _LOG.debug("cache hit for %s (%s), %.1fh old", ticker, range_key, cache_age / 3600)
         elif self.offline:
             raise MarketDataError(
                 f"offline and {ticker!r} is not cached. Fetch it once with a "
@@ -248,15 +252,25 @@ class MarketDataClient:
             )
         else:
             try:
-                payload = self._download(ticker, range_key)
+                with log_duration(_LOG, "market fetch", ticker=ticker, range_key=range_key):
+                    payload = self._download(ticker, range_key)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(payload, encoding="utf-8")
                 source = "network"
+                _LOG.info("fetched %s (%s) from the network", ticker, range_key)
             except MarketDataError:
                 if cached is None:
                     raise
                 payload, source = cached, f"STALE cache ({cache_age / 86400:.1f} days old)"
                 detail["warning"] = "network fetch failed; served a stale cached copy"
+                # Serving stale data silently is how a backtest ends up run on
+                # last month's prices. It is surfaced in `detail` for the report
+                # and logged at WARNING for anyone watching the process.
+                _LOG.warning(
+                    "network fetch failed for %s; served a cached copy %.1f days old",
+                    ticker,
+                    cache_age / 86400,
+                )
 
         series, info = self._parse(payload, ticker, adjusted=adjusted)
         detail["source"] = source
