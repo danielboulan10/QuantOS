@@ -8,6 +8,33 @@ changes here are ones where the measurement came out badly and was kept.
 
 ## [Unreleased]
 
+### Added
+- **Fixed income** ([`fixed_income/curve.py`](src/quantos/fixed_income/curve.py)):
+  bootstrap, Nelson-Siegel and Svensson fits, forwards, duration, convexity,
+  key-rate durations. `quantos curve`.
+- **Structured logging** ([`core/logging.py`](src/quantos/core/logging.py)) and
+  `--log-level`. The package previously had none.
+- **Date alignment and factor differencing** ([`data/align.py`](src/quantos/data/align.py)),
+  extracted from a CLI command body.
+- `Makefile`, `Dockerfile`, devcontainer, `.editorconfig`, issue and PR templates.
+- [Engineering audit](docs/ENGINEERING_REPORT.md) and
+  [improvement backlog](docs/IMPROVEMENT_BACKLOG.md).
+
+### Fixed
+- The bootstrap repriced a 2-year bond at **99.9970** instead of 100 — a
+  circularity where a 1.5-year coupon interpolated against the point still being
+  solved. Now exact to 1.3e-13.
+- A one-month bill's cash flow was placed at the first coupon date rather than at
+  maturity, implying a **22% one-month zero rate**.
+- Stale cached market data was served silently; now logged at WARNING.
+- Two `traceback.print_exc()` calls wrote to stdout, one interleaving a traceback
+  with the HTML being served.
+- Seven duplicated return-computation sites, two disagreeing on array length.
+
+### Changed
+- `data/analysis.py` coverage **29.8% → 91.6%**; it had no test file.
+- Claims verified in CI: 24 → **26**.
+
 ## [1.5.0] — 2026-08-03
 
 ### Added

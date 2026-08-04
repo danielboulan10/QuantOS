@@ -16,7 +16,8 @@ dependency. Every number checked by CI — including the ones that came out badl
 ### → **[Open the live app: danielboulan10.github.io/QuantOS](https://danielboulan10.github.io/QuantOS/)**
 
 [Architecture](docs/ARCHITECTURE.md) · [Engineering audit](docs/ENGINEERING_REPORT.md) ·
-[Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md) · [Methodology](docs/MATH.md) ·
+[Backlog](docs/IMPROVEMENT_BACKLOG.md) · [Roadmap](ROADMAP.md) ·
+[Changelog](CHANGELOG.md) · [Methodology](docs/MATH.md) ·
 [Forward record](forward/RECORD.md) · [Research](docs/research/)
 
 ---
