@@ -6,10 +6,10 @@ dependency. Every number checked by CI — including the ones that came out badl
 [![CI](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml/badge.svg)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
 [![site](https://github.com/danielboulan10/QuantOS/actions/workflows/site.yml/badge.svg)](https://danielboulan10.github.io/QuantOS/)
 [![forward testing](https://github.com/danielboulan10/QuantOS/actions/workflows/forward.yml/badge.svg)](forward/RECORD.md)
-[![tests](https://img.shields.io/badge/tests-1085%20passing-brightgreen)](tests/)
+[![tests](https://img.shields.io/badge/tests-1114%20passing-brightgreen)](tests/)
 [![mutation score](https://img.shields.io/badge/mutation%20score-55%25-orange)](docs/TEST_QUALITY.md)
 [![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
-[![claims verified](https://img.shields.io/badge/documented%20claims-24%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
+[![claims verified](https://img.shields.io/badge/documented%20claims-26%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
 [![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
@@ -58,6 +58,7 @@ out badly, and CI fails if any of them quietly changes:
 | Searching **840 factors** on SPY, the best has t = 2.23 and **survives nothing** | [factor lab](src/quantos/research/factor_lab.py) |
 | The stock-bond hedge **inverted** in 2022 — TLT fell 31% against SPY's 24% | [stress tests](src/quantos/risk/stress.py) |
 | A macro beta with **t = 8.15** had the sign wrong for the regime that followed | [scenarios](src/quantos/risk/scenario.py) |
+| Duration alone misprices a 300bp move by **12% of notional** | [fixed income](src/quantos/fixed_income/curve.py) |
 
 **Nothing is imported that could be checked.** One runtime dependency: NumPy.
 Every special function, distribution, statistical test, optimiser, root finder,
@@ -103,6 +104,7 @@ US equities, ETFs, indices (`^GSPC`), foreign listings (`VOD.L`), crypto
 quantos research  --ticker AAPL           # any listed symbol, no key required
 quantos research  --csv my_prices.csv     # or your own file
 quantos research  --series spx            # or anything on FRED
+quantos curve                             # Treasury curve, forwards, duration, convexity
 quantos scenario  --ticker QQQ            # macro shocks, with the interval that matters
 quantos lattice   --american --put        # binomial + trinomial, with the oscillation
 quantos stress    --ticker SPY --against TLT   # replay through 2008, COVID, 2022
@@ -119,7 +121,7 @@ quantos simulate                          # agent-based market
 quantos book                              # order book throughput + invariants
 quantos demo                              # tour every subsystem, ~2 minutes
 quantos doctor                            # environment check
-pytest                                    # 1,085 tests, incl. every docstring example
+pytest                                    # 1,114 tests, incl. every docstring example
 ```
 </details>
 
@@ -167,7 +169,7 @@ Saying so is the point.*
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full diagram. In short: a
 dependency-free numerical core, a research layer built on it that reports its own
 limits, and three CI mechanisms that stop the documentation drifting away from
-the code — a hash-chained forward ledger, twenty-four re-derived claims, and
+the code — a hash-chained forward ledger, twenty-six re-derived claims, and
 mutation testing that grades whether the tests are load-bearing at all.
 
 ---
@@ -423,7 +425,7 @@ iteration because the textbook fixed point oscillates.
 
 Documentation rots silently: a refactor moves a constant, the prose keeps quoting
 the old figure, and nothing fails. So the prose is not trusted —
-[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives twenty-four
+[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives twenty-six
 documented claims from scratch on every build** and fails if any has drifted.
 
 ```console
@@ -657,6 +659,59 @@ are shocked at once, the report states that ignoring the covariance between
 betas makes the interval *narrower* than the truth — an error in the direction of
 overconfidence, which is the one worth naming.
 
+## Fixed income: the curve, and what comes off it
+
+A quoted Treasury curve is a set of **par yields** — the coupon that makes a bond
+trade at 100. It is not a discount curve, and using it as one is the standard
+first mistake: discounting a five-year cash flow at the five-year par yield
+prices that bond right by construction and everything else wrong.
+
+```bash
+quantos curve
+```
+
+| | |
+|---|---|
+| **Bootstrap** | strips par yields into zero rates, solving each maturity so the input bond prices to **exactly 100** — worst error 1.3e-13 across 11 maturities |
+| **Nelson-Siegel** | three factors — level, slope, curvature — fitted deterministically, 7.6bp RMSE |
+| **Svensson** | second hump, **1.7bp** RMSE |
+| **Forwards** | 1y1y 4.44%, 5y5y 5.08%, 10y20y 5.66% |
+| **Risk** | duration, convexity, DV01, key-rate durations |
+
+**The bootstrap that looks right and is not.** The textbook algebraic version
+solves each discount factor from the coupons before it. That works only if every
+coupon date is a quoted maturity — and it is not: a two-year bond pays at 1.5
+years, which must be interpolated *between the one-year point and the two-year
+point still being solved*. The first implementation here did exactly that and
+repriced the 2-year bond at **99.9970** instead of 100. A 3bp error, small enough
+to read as rounding, and it compounds along the curve. Root-finding on the zero
+rate with the candidate inside the interpolation removes the circularity.
+
+**Duration is a first-order approximation and this says by how much.** On a 300bp
+move in a 30-year bond:
+
+| | |
+|---|---:|
+| actual price change | **−33.35%** |
+| duration alone | −45.22% |
+| duration + convexity | −30.17% |
+
+Duration is off by **11.87 percentage points of notional**, and it errs by
+*over-predicting the loss* — which is exactly why a long-duration position is not
+a symmetric bet. CI re-derives this.
+
+**Two models are kept because the better fit is the worse model.** Svensson beats
+Nelson-Siegel on this curve (1.7bp against 7.6bp), and in doing so drives its
+`level` parameter — the asymptotic long rate — outside every observed yield. It
+fits better and its parameters mean less. Nelson-Siegel's level stays readable as
+"the long rate". Pick on which property you need; the module reports both and
+says which is which.
+
+**What this cannot do.** It assumes the quoted curve is the discount curve. Post-
+2008 that is false even for Treasuries — there is a Treasury/OIS basis, and
+derivative desks discount at OIS. Pricing a swap off this would be wrong for
+reasons that have nothing to do with the arithmetic.
+
 ## Options priced four independent ways
 
 The same American put, by four methods that share no code beyond the payoff:
@@ -872,6 +927,7 @@ Read in this order if you want the argument rather than the API.
 | [`derivatives/black_scholes.py`](src/quantos/derivatives/black_scholes.py) | Full Greek set (through vanna/volga/charm), safeguarded implied volatility. |
 | [`derivatives/lattice.py`](src/quantos/derivatives/lattice.py) | CRR binomial and Boyle trinomial trees, and the oscillation that makes a step count meaningless on its own. |
 | [`planning/calculator.py`](src/quantos/planning/calculator.py) | Compound-interest projection matched to a published schedule, and the distribution it hides. |
+| [`fixed_income/`](src/quantos/fixed_income) | Bootstrap, Nelson-Siegel and Svensson fits, forwards, duration, convexity, key-rate durations. |
 | [`risk/scenario.py`](src/quantos/risk/scenario.py) | Macro shock response with HAC intervals, and the detector for a precise answer that is not a reliable one. |
 | [`risk/stress.py`](src/quantos/risk/stress.py) | Historical crisis replay, with survivorship refused rather than papered over. |
 | [`risk/`](src/quantos/risk) | Coherent risk measures, Ledoit-Wolf shrinkage, HRP, risk parity, Kelly. |

@@ -857,6 +857,80 @@ def _a_narrow_interval_is_not_a_reliable_answer() -> tuple[bool, str]:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Fixed income
+# --------------------------------------------------------------------------- #
+@claim(
+    "the bootstrapped curve reprices every input bond to par",
+    "fixed_income/curve.py -- the defining property of a bootstrap",
+)
+def _bootstrap_is_exact() -> tuple[bool, str]:
+    """An identity, so a tolerance here is a bug rather than a judgement.
+
+    The naive algebraic bootstrap fails it: a 2-year bond pays at 1.5 years,
+    which must be interpolated between the 1-year point and the 2-year point
+    still being solved. That circularity repriced the 2-year at 99.9970 -- a 3bp
+    error that reads as rounding and compounds along the curve.
+    """
+    import numpy as np
+
+    from quantos.fixed_income import bootstrap_zero_curve, price_bond
+
+    maturities = np.array([1 / 12, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 10.0, 20.0, 30.0])
+    pars = np.array(
+        [0.0378, 0.0383, 0.0398, 0.0408, 0.0428, 0.0434, 0.0445, 0.0459, 0.0475, 0.0528, 0.0527]
+    )
+    curve = bootstrap_zero_curve(maturities, pars)
+
+    worst = max(abs(price_bond(curve, m, c) - 100.0) for m, c in zip(maturities, pars, strict=True))
+    return worst < 1e-8, f"worst repricing error across 11 maturities: {worst:.2e}"
+
+
+@claim(
+    "duration alone misprices a large rate move, and convexity closes most of the gap",
+    "README fixed income section and fixed_income/curve.py",
+)
+def _convexity_is_the_gap() -> tuple[bool, str]:
+    """Measured rather than asserted.
+
+    A first-order approximation quoted without its error term is the sort of
+    thing that looks rigorous and is not. On a 300bp move in a 30-year bond the
+    linearisation is off by several percent of notional, and the sign matters
+    too: duration over-predicts the loss, which is why a long-duration position
+    is not a symmetric bet.
+    """
+    import numpy as np
+
+    from quantos.fixed_income import (
+        YieldCurve,
+        bootstrap_zero_curve,
+        convexity,
+        duration,
+        price_bond,
+    )
+
+    maturities = np.array([0.25, 1.0, 2.0, 5.0, 10.0, 30.0])
+    pars = np.array([0.0383, 0.0408, 0.0428, 0.0445, 0.0475, 0.0527])
+    curve = bootstrap_zero_curve(maturities, pars)
+
+    shift = 0.03
+    base = price_bond(curve, 30.0, 0.05)
+    _, modified = duration(curve, 30.0, 0.05)
+    cx = convexity(curve, 30.0, 0.05)
+
+    shifted = YieldCurve(curve.maturities, curve.zero_rates + shift)
+    actual = (price_bond(shifted, 30.0, 0.05) - base) / base
+    first = -modified * shift
+    second = first + 0.5 * cx * shift**2
+
+    improved = abs(actual - second) < abs(actual - first) / 3
+    exposed = abs(actual - first) > 0.02
+    return improved and exposed, (
+        f"300bp on a 30y bond: actual {actual:+.2%}, duration alone {first:+.2%} "
+        f"(off by {abs(actual - first):.2%}), with convexity {second:+.2%}"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true", help="skip the slow simulations")

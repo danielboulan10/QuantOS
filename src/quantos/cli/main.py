@@ -1075,6 +1075,101 @@ def cmd_intraday(args: argparse.Namespace) -> int:
     return 0
 
 
+#: The Treasury constant-maturity series, and the maturity each represents.
+_TREASURY_CURVE = (
+    (1 / 12, "DGS1MO"),
+    (0.25, "DGS3MO"),
+    (0.5, "DGS6MO"),
+    (1.0, "DGS1"),
+    (2.0, "DGS2"),
+    (3.0, "DGS3"),
+    (5.0, "DGS5"),
+    (7.0, "DGS7"),
+    (10.0, "DGS10"),
+    (20.0, "DGS20"),
+    (30.0, "DGS30"),
+)
+
+
+def cmd_curve(args: argparse.Namespace) -> int:
+    """Bootstrap the Treasury curve, fit it, and price interest rate risk."""
+    from quantos.data.fred import FredClient, FredError
+    from quantos.fixed_income import (
+        bootstrap_zero_curve,
+        convexity,
+        duration,
+        fit_nelson_siegel,
+        fit_svensson,
+        key_rate_durations,
+    )
+
+    client = FredClient()
+    maturities: list[float] = []
+    par_yields: list[float] = []
+    for maturity, series_id in _TREASURY_CURVE:
+        try:
+            par_yields.append(client.get(series_id).latest / 100.0)
+            maturities.append(maturity)
+        except (FredError, OSError) as error:
+            _LOG.warning("skipping %s (%s): %s", series_id, maturity, error)
+
+    if len(maturities) < 4:
+        print("not enough of the Treasury curve is available to bootstrap")
+        return 1
+
+    curve = bootstrap_zero_curve(maturities, par_yields)
+    print(curve.summary())
+
+    grid = np.asarray(maturities)
+    quotes = np.asarray(par_yields)
+    ns = fit_nelson_siegel(grid, quotes)
+    print(f"\nNELSON-SIEGEL   rmse {1e4 * ns.rmse:5.1f}bp")
+    print(f"  level {ns.level:+.4f}  slope {ns.slope:+.4f}  curvature {ns.curvature:+.4f}")
+    print(f"  implied short rate {ns.short_rate:.3%}, long rate {ns.long_rate:.3%}")
+
+    if len(maturities) >= 5:
+        sv = fit_svensson(grid, quotes)
+        print(f"\nSVENSSON        rmse {1e4 * sv.rmse:5.1f}bp   (two humps)")
+        low, high = quotes.min(), quotes.max()
+        if not low <= sv.level <= high:
+            print(
+                "  Note: Svensson fits better but its level parameter has left the "
+                "observed range, so it can no longer be read as 'the long rate'. "
+                "The better fit is the less interpretable model."
+            )
+
+    print("\nFORWARD RATES")
+    for start, end in ((1.0, 2.0), (2.0, 5.0), (5.0, 10.0), (10.0, 30.0)):
+        if end <= max(maturities):
+            label = f"{start:g}y{end - start:g}y"
+            print(f"  {label:<8}{curve.forward_rate(start, end):>8.3%}")
+
+    print(f"\nINTEREST RATE RISK, {args.coupon:.2%} coupon")
+    print(f"  {'maturity':>10}{'duration':>10}{'convexity':>11}{'DV01 /100':>11}")
+    for maturity in (2.0, 5.0, 10.0, 30.0):
+        if maturity > max(maturities):
+            continue
+        macaulay, _ = duration(curve, maturity, args.coupon)
+        cx = convexity(curve, maturity, args.coupon)
+        # DV01: price change per basis point, per 100 of face.
+        dv01 = macaulay * 1e-4 * 100.0
+        print(f"  {maturity:>9.0f}y{macaulay:>10.2f}{cx:>11.1f}{dv01:>11.4f}")
+
+    if args.key_rates:
+        print(f"\nKEY RATE DURATIONS, {args.key_rates:g}y bond")
+        partial = key_rate_durations(curve, args.key_rates, args.coupon)
+        for point, value in sorted(partial.items()):
+            if abs(value) > 0.005:
+                bar = "#" * max(1, round(abs(value) * 4))
+                print(f"  {point:>6.2f}y{value:>8.3f}  {bar}")
+        print(
+            "\n  Parallel duration assumes the whole curve moves together. The 2022\n"
+            "  selloff was a flattening, so a book hedged on parallel duration alone\n"
+            "  was hedged against a move that did not happen."
+        )
+    return 0
+
+
 def cmd_scenario(args: argparse.Namespace) -> int:
     """Estimate macro sensitivities, then answer 'what happens if' as a range."""
     from quantos.data.align import MACRO_FACTORS, coverage, factor_changes, simple_returns
@@ -1559,6 +1654,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_intraday)
 
     from quantos.data.align import MACRO_FACTORS
+
+    p = sub.add_parser("curve", help="bootstrap the Treasury curve and price rate risk")
+    p.add_argument("--coupon", type=float, default=0.045, help="coupon for the risk table")
+    p.add_argument(
+        "--key-rates",
+        type=float,
+        default=10.0,
+        help="maturity to decompose into key rate durations; 0 disables",
+    )
+    p.set_defaults(func=cmd_curve)
 
     p = sub.add_parser("scenario", help="what happens if rates fall 100bps, as a range")
     p.add_argument("--ticker", required=True)
