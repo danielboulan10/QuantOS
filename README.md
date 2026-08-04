@@ -6,10 +6,10 @@ dependency. Every number checked by CI — including the ones that came out badl
 [![CI](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml/badge.svg)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
 [![site](https://github.com/danielboulan10/QuantOS/actions/workflows/site.yml/badge.svg)](https://danielboulan10.github.io/QuantOS/)
 [![forward testing](https://github.com/danielboulan10/QuantOS/actions/workflows/forward.yml/badge.svg)](forward/RECORD.md)
-[![tests](https://img.shields.io/badge/tests-1020%20passing-brightgreen)](tests/)
+[![tests](https://img.shields.io/badge/tests-1038%20passing-brightgreen)](tests/)
 [![mutation score](https://img.shields.io/badge/mutation%20score-55%25-orange)](docs/TEST_QUALITY.md)
 [![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
-[![claims verified](https://img.shields.io/badge/documented%20claims-23%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
+[![claims verified](https://img.shields.io/badge/documented%20claims-24%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
 [![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
@@ -57,6 +57,7 @@ out badly, and CI fails if any of them quietly changes:
 | The retirement number every calculator prints is reached only **43%** of the time | [calculator](src/quantos/planning/calculator.py) |
 | Searching **840 factors** on SPY, the best has t = 2.23 and **survives nothing** | [factor lab](src/quantos/research/factor_lab.py) |
 | The stock-bond hedge **inverted** in 2022 — TLT fell 31% against SPY's 24% | [stress tests](src/quantos/risk/stress.py) |
+| A macro beta with **t = 8.15** had the sign wrong for the regime that followed | [scenarios](src/quantos/risk/scenario.py) |
 
 **Nothing is imported that could be checked.** One runtime dependency: NumPy.
 Every special function, distribution, statistical test, optimiser, root finder,
@@ -91,6 +92,7 @@ US equities, ETFs, indices (`^GSPC`), foreign listings (`VOD.L`), crypto
 quantos research  --ticker AAPL           # any listed symbol, no key required
 quantos research  --csv my_prices.csv     # or your own file
 quantos research  --series spx            # or anything on FRED
+quantos scenario  --ticker QQQ            # macro shocks, with the interval that matters
 quantos lattice   --american --put        # binomial + trinomial, with the oscillation
 quantos stress    --ticker SPY --against TLT   # replay through 2008, COVID, 2022
 quantos factors   --ticker SPY            # 840-factor search, corrected for the search
@@ -106,7 +108,7 @@ quantos simulate                          # agent-based market
 quantos book                              # order book throughput + invariants
 quantos demo                              # tour every subsystem, ~2 minutes
 quantos doctor                            # environment check
-pytest                                    # 1,020 tests, incl. every docstring example
+pytest                                    # 1,038 tests, incl. every docstring example
 ```
 </details>
 
@@ -139,7 +141,7 @@ Saying so is the point.*
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full diagram. In short: a
 dependency-free numerical core, a research layer built on it that reports its own
 limits, and three CI mechanisms that stop the documentation drifting away from
-the code — a hash-chained forward ledger, twenty-three re-derived claims, and
+the code — a hash-chained forward ledger, twenty-four re-derived claims, and
 mutation testing that grades whether the tests are load-bearing at all.
 
 ---
@@ -395,7 +397,7 @@ iteration because the textbook fixed point oscillates.
 
 Documentation rots silently: a refactor moves a constant, the prose keeps quoting
 the old figure, and nothing fails. So the prose is not trusted —
-[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives twenty-three
+[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives twenty-four
 documented claims from scratch on every build** and fails if any has drifted.
 
 ```console
@@ -579,6 +581,55 @@ quantos intraday --csv ticks.csv --compare other_ticks.csv
 ```
 
 ---
+
+## "What happens if rates fall 100bps" — answered as a range
+
+Every investment committee asks this. Most tools answer with a point estimate:
+multiply a beta by a shock, print a number. That number is wrong in three ways
+at once, and the module reports all three.
+
+```bash
+quantos scenario --ticker QQQ --factors rates credit
+```
+
+Here is what happens when you ask it about QQQ and the 10-year Treasury yield,
+on twenty years of daily data:
+
+```
+  estimated response    +5.71%
+  90% interval         [+4.55%, +6.86%]
+  across subsamples    [-1.70%, +9.12%]
+```
+
+The beta is +5.71 with **t = 8.15**. The 90% interval **excludes zero**. Every
+conventional check passes, and the answer is worthless — because the subsample
+estimates disagree about the *sign*:
+
+| period | rate beta | t |
+|---|---:|---:|
+| 2006–2009 (GFC) | +8.54 | +7.02 |
+| 2010–2014 (ZIRP) | +9.23 | +11.60 |
+| 2015–2019 | +7.86 | +7.79 |
+| 2020–2021 (COVID/QE) | +9.40 | +2.77 |
+| **2022–2023 (hiking)** | **−2.81** | −1.66 |
+| 2023–2026 | −1.20 | −1.01 |
+
+Four consecutive regimes agreeing, then a reversal. **A confidence interval
+measures sampling error inside the estimation window. It does not measure the
+risk that the window stops applying** — and that is the risk that actually shows
+up. So a narrow interval on an unstable beta is the most dangerous output a
+scenario tool can produce, and this one refuses to print the number without
+saying so:
+
+> READ THIS BEFORE THE NUMBER. The interval excludes zero, but the subsample
+> estimates disagree about the SIGN. […] A precise answer here is not a reliable
+> one.
+
+Every interval uses Newey-West, because macro betas are fitted on autocorrelated
+data where the naive standard error is itself too small. Where several factors
+are shocked at once, the report states that ignoring the covariance between
+betas makes the interval *narrower* than the truth — an error in the direction of
+overconfidence, which is the one worth naming.
 
 ## Options priced four independent ways
 
@@ -795,6 +846,7 @@ Read in this order if you want the argument rather than the API.
 | [`derivatives/black_scholes.py`](src/quantos/derivatives/black_scholes.py) | Full Greek set (through vanna/volga/charm), safeguarded implied volatility. |
 | [`derivatives/lattice.py`](src/quantos/derivatives/lattice.py) | CRR binomial and Boyle trinomial trees, and the oscillation that makes a step count meaningless on its own. |
 | [`planning/calculator.py`](src/quantos/planning/calculator.py) | Compound-interest projection matched to a published schedule, and the distribution it hides. |
+| [`risk/scenario.py`](src/quantos/risk/scenario.py) | Macro shock response with HAC intervals, and the detector for a precise answer that is not a reliable one. |
 | [`risk/stress.py`](src/quantos/risk/stress.py) | Historical crisis replay, with survivorship refused rather than papered over. |
 | [`risk/`](src/quantos/risk) | Coherent risk measures, Ledoit-Wolf shrinkage, HRP, risk parity, Kelly. |
 | [`execution/almgren_chriss.py`](src/quantos/execution/almgren_chriss.py) | Optimal execution frontier, square-root impact law and a test of its exponent. |

@@ -805,6 +805,58 @@ def _convergence_oscillates() -> tuple[bool, str]:
     )
 
 
+@claim(
+    "a significant macro beta can still have the sign wrong for what comes next",
+    "README scenario section and risk/scenario.py",
+    conditional=True,
+)
+def _a_narrow_interval_is_not_a_reliable_answer() -> tuple[bool, str]:
+    """The claim the scenario engine exists to make, re-derived from live data.
+
+    QQQ's sensitivity to the 10-year Treasury yield is strongly positive over
+    twenty years and every conventional check passes. Split by period it is
+    positive in four consecutive regimes and then negative through the 2022
+    hiking cycle. If the sign ever stops flipping, the README's argument has
+    changed and should be rewritten rather than quietly kept.
+    """
+    import numpy as np
+
+    from quantos.data.fred import FredClient, FredError
+    from quantos.data.market import MarketDataError, fetch_prices
+    from quantos.risk.scenario import apply_shock, estimate_response
+
+    try:
+        yields = FredClient().get("DGS10")
+        series, _ = fetch_prices("QQQ", range_key="20y")
+    except (FredError, MarketDataError, OSError) as error:
+        return True, f"SKIP: data unavailable ({type(error).__name__})"
+
+    dates = np.asarray(series.dates, dtype="datetime64[D]")
+    prices = np.asarray(series.prices, dtype=float)
+    returns = np.zeros(prices.size)
+    returns[1:] = np.diff(prices) / prices[:-1]
+
+    position = {d: i for i, d in enumerate(np.asarray(yields.dates, dtype="datetime64[D]"))}
+    values = np.asarray(yields.values, dtype=float)
+    level = np.array([values[position[d]] if d in position else np.nan for d in dates])
+    change = np.full(dates.size, np.nan)
+    change[1:] = np.diff(level) / 100.0
+
+    usable = np.isfinite(returns) & np.isfinite(change)
+    if usable.sum() < 1000:
+        return True, "SKIP: not enough overlapping history"
+
+    response = estimate_response(returns[usable], {"rates": change[usable]})
+    shock = apply_shock(response, {"rates": 0.01}, name="rates rise 100bps")
+
+    return shock.confidently_wrong, (
+        f"beta {response.betas['rates']:+.2f} (t = {response.t_statistics['rates']:.2f}), "
+        f"90% interval [{shock.low:+.2%}, {shock.high:+.2%}] excludes zero, "
+        f"subsamples span [{min(shock.subsample_points):+.2%}, "
+        f"{max(shock.subsample_points):+.2%}]"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true", help="skip the slow simulations")

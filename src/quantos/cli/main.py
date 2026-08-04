@@ -1070,6 +1070,78 @@ def cmd_intraday(args: argparse.Namespace) -> int:
     return 0
 
 
+#: FRED series used as macro factors, and how to turn each into a change series.
+_MACRO_FACTORS = {
+    "rates": ("DGS10", "yield"),
+    "credit": ("BAMLH0A0HYM2", "yield"),
+    "oil": ("DCOILWTICO", "level"),
+    "dollar": ("DTWEXBGS", "level"),
+}
+
+
+def cmd_scenario(args: argparse.Namespace) -> int:
+    """Estimate macro sensitivities, then answer 'what happens if' as a range."""
+    from quantos.data.fred import FredClient, FredError
+    from quantos.data.market import fetch_prices
+    from quantos.risk.scenario import SCENARIOS, apply_shock, estimate_response
+
+    series, info = fetch_prices(args.ticker, range_key=args.range)
+    dates = np.asarray(series.dates, dtype="datetime64[D]")
+    prices = np.asarray(series.prices, dtype=float)
+    returns = np.zeros(prices.size)
+    returns[1:] = np.diff(prices) / prices[:-1]
+
+    client = FredClient()
+    factors: dict[str, ArrayLike] = {}
+    for name in args.factors:
+        series_id, kind = _MACRO_FACTORS[name]
+        try:
+            macro = client.get(series_id)
+        except (FredError, OSError) as error:
+            print(f"  skipping {name}: {error}")
+            continue
+
+        # Align onto the instrument's own dates. Aligning the other way would
+        # truncate the instrument to the macro calendar and silently shorten the
+        # sample, which is the bug this repository already fixed once in
+        # data/factors.py.
+        position = {
+            date: i for i, date in enumerate(np.asarray(macro.dates, dtype="datetime64[D]"))
+        }
+        values = np.asarray(macro.values, dtype=float)
+        level = np.array([values[position[d]] if d in position else np.nan for d in dates])
+
+        change = np.full(dates.size, np.nan)
+        if kind == "yield":
+            # A yield is already in percent, so a difference is the move in
+            # percentage points; /100 puts it in the same decimal units as a shock.
+            change[1:] = np.diff(level) / 100.0
+        else:
+            change[1:] = np.diff(level) / level[:-1]
+        factors[name] = change
+
+    if not factors:
+        print("no macro factors available; nothing to estimate")
+        return 1
+
+    usable = np.isfinite(returns) & np.all(
+        np.isfinite(np.column_stack(list(factors.values()))), axis=1
+    )
+    response = estimate_response(
+        returns[usable], {name: np.asarray(v)[usable] for name, v in factors.items()}
+    )
+
+    print(f"{info.describe()}\n")
+    print(response.summary())
+    print()
+
+    chosen = [s for s in SCENARIOS if set(s.shocks) <= set(factors)]
+    for scenario in chosen:
+        print(apply_shock(response, scenario.shocks, name=scenario.name).summary())
+        print()
+    return 0
+
+
 def cmd_lattice(args: argparse.Namespace) -> int:
     """Price on a lattice, and show what the step count is actually worth."""
     from quantos.derivatives.black_scholes import OptionType
@@ -1494,6 +1566,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--session", type=int, default=0, help="which session to analyse in detail")
     p.add_argument("--compare", default=None, help="second intraday file, for the Epps curve")
     p.set_defaults(func=cmd_intraday)
+
+    p = sub.add_parser("scenario", help="what happens if rates fall 100bps, as a range")
+    p.add_argument("--ticker", required=True)
+    p.add_argument("--range", default="20y")
+    p.add_argument(
+        "--factors",
+        nargs="*",
+        default=["rates"],
+        choices=sorted(_MACRO_FACTORS),
+        help="macro factors to estimate sensitivities to",
+    )
+    p.set_defaults(func=cmd_scenario)
 
     p = sub.add_parser("lattice", help="binomial and trinomial option pricing")
     p.add_argument("--spot", type=float, default=100.0)

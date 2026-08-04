@@ -93,6 +93,7 @@ TARGETS: dict[str, tuple[str, str]] = {
     ),
     "book": ("src/quantos/exchange/book.py", "tests/exchange"),
     "heston": ("src/quantos/derivatives/heston.py", "tests/derivatives/test_heston.py"),
+    "scenario": ("src/quantos/risk/scenario.py", "tests/risk/test_scenario.py"),
     "lattice": (
         "src/quantos/derivatives/lattice.py",
         "tests/derivatives/test_lattice.py",
