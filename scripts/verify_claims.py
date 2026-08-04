@@ -732,6 +732,79 @@ def _partial_coverage_is_refused() -> tuple[bool, str]:
     )
 
 
+@claim(
+    "four independent pricing methods agree on the same American put",
+    "README options section and derivatives/lattice.py",
+    slow=True,
+)
+def _four_methods_agree() -> tuple[bool, str]:
+    """The strongest statement available about a number with no closed form.
+
+    A binomial lattice, a trinomial lattice and least-squares Monte Carlo share
+    no code beyond the payoff, and their errors have entirely different shapes.
+    Agreement between them is evidence; disagreement would mean one is wrong and
+    would be caught here rather than discovered by a reader.
+    """
+    from quantos.derivatives.american import price_american
+    from quantos.derivatives.black_scholes import OptionType
+    from quantos.derivatives.lattice import binomial_price, trinomial_price
+
+    binomial = binomial_price(
+        36.0,
+        40.0,
+        1.0,
+        0.20,
+        rate=0.06,
+        n_steps=3000,
+        option_type=OptionType.PUT,
+        american=True,
+        measure_oscillation=False,
+    ).price
+    trinomial = trinomial_price(
+        36.0,
+        40.0,
+        1.0,
+        0.20,
+        rate=0.06,
+        n_steps=1500,
+        option_type=OptionType.PUT,
+        american=True,
+    ).price
+    monte_carlo = price_american(
+        36.0, 40.0, 1.0, 0.20, rate=0.06, n_paths=20_000, n_steps=50, n_inner=30
+    )
+
+    lattices_agree = abs(binomial - trinomial) < 0.005
+    bracketed = monte_carlo.lower - 0.02 <= binomial <= monte_carlo.upper + 0.02
+    return lattices_agree and bracketed, (
+        f"binomial {binomial:.4f}, trinomial {trinomial:.4f}, "
+        f"LSMC bracket [{monte_carlo.lower:.4f}, {monte_carlo.upper:.4f}]; "
+        f"published 4.478 sits {binomial - 4.478:+.4f} below the lattice"
+    )
+
+
+@claim(
+    "binomial convergence oscillates, and the trinomial lattice does not",
+    "derivatives/lattice.py -- the reason a step count is not evidence of accuracy",
+)
+def _convergence_oscillates() -> tuple[bool, str]:
+    """A price quoted at one convenient n is a point on an oscillation."""
+    import numpy as np
+
+    from quantos.derivatives.lattice import convergence_path
+
+    _, binomial, trinomial = convergence_path(
+        100.0, 105.0, 1.0, 0.25, rate=0.04, steps=range(30, 151)
+    )
+    binomial_flips = int(np.sum(np.diff(np.sign(binomial)) != 0))
+    trinomial_flips = int(np.sum(np.diff(np.sign(trinomial)) != 0))
+
+    return binomial_flips > 40 and trinomial_flips < binomial_flips / 5, (
+        f"over 121 step counts the binomial error changes sign {binomial_flips} "
+        f"times, the trinomial {trinomial_flips}"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true", help="skip the slow simulations")

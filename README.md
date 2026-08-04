@@ -6,10 +6,10 @@ dependency. Every number checked by CI — including the ones that came out badl
 [![CI](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml/badge.svg)](https://github.com/danielboulan10/QuantOS/actions/workflows/ci.yml)
 [![site](https://github.com/danielboulan10/QuantOS/actions/workflows/site.yml/badge.svg)](https://danielboulan10.github.io/QuantOS/)
 [![forward testing](https://github.com/danielboulan10/QuantOS/actions/workflows/forward.yml/badge.svg)](forward/RECORD.md)
-[![tests](https://img.shields.io/badge/tests-993%20passing-brightgreen)](tests/)
+[![tests](https://img.shields.io/badge/tests-1020%20passing-brightgreen)](tests/)
 [![mutation score](https://img.shields.io/badge/mutation%20score-55%25-orange)](docs/TEST_QUALITY.md)
 [![runtime deps](https://img.shields.io/badge/runtime%20deps-numpy%20only-blue)](docs/ddr/DDR-002-numpy-only-runtime.md)
-[![claims verified](https://img.shields.io/badge/documented%20claims-21%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
+[![claims verified](https://img.shields.io/badge/documented%20claims-23%20verified%20in%20CI-brightgreen)](scripts/verify_claims.py)
 [![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-blue)](pyproject.toml)
 [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
@@ -91,6 +91,7 @@ US equities, ETFs, indices (`^GSPC`), foreign listings (`VOD.L`), crypto
 quantos research  --ticker AAPL           # any listed symbol, no key required
 quantos research  --csv my_prices.csv     # or your own file
 quantos research  --series spx            # or anything on FRED
+quantos lattice   --american --put        # binomial + trinomial, with the oscillation
 quantos stress    --ticker SPY --against TLT   # replay through 2008, COVID, 2022
 quantos factors   --ticker SPY            # 840-factor search, corrected for the search
 quantos plan      --volatility 0.15       # investment projection + its distribution
@@ -105,7 +106,7 @@ quantos simulate                          # agent-based market
 quantos book                              # order book throughput + invariants
 quantos demo                              # tour every subsystem, ~2 minutes
 quantos doctor                            # environment check
-pytest                                    # 993 tests, incl. every docstring example
+pytest                                    # 1,020 tests, incl. every docstring example
 ```
 </details>
 
@@ -138,7 +139,7 @@ Saying so is the point.*
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full diagram. In short: a
 dependency-free numerical core, a research layer built on it that reports its own
 limits, and three CI mechanisms that stop the documentation drifting away from
-the code — a hash-chained forward ledger, twenty-one re-derived claims, and
+the code — a hash-chained forward ledger, twenty-three re-derived claims, and
 mutation testing that grades whether the tests are load-bearing at all.
 
 ---
@@ -394,7 +395,7 @@ iteration because the textbook fixed point oscillates.
 
 Documentation rots silently: a refactor moves a constant, the prose keeps quoting
 the old figure, and nothing fails. So the prose is not trusted —
-[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives twenty-one
+[`scripts/verify_claims.py`](scripts/verify_claims.py) **re-derives twenty-three
 documented claims from scratch on every build** and fails if any has drifted.
 
 ```console
@@ -579,6 +580,46 @@ quantos intraday --csv ticks.csv --compare other_ticks.csv
 
 ---
 
+## Options priced four independent ways
+
+The same American put, by four methods that share no code beyond the payoff:
+
+| method | price | how it works |
+|---|---:|---|
+| Cox-Ross-Rubinstein binomial | **4.4867** | exact exercise decision at every node |
+| Boyle trinomial | **4.4863** | third branch decouples space from time |
+| Least-squares Monte Carlo | 4.4526 – 4.9887 | a *bracket*: learned rule below, dual above |
+| Longstaff-Schwartz (2001), published | 4.478 | |
+
+Four methods agreeing is a far stronger statement than any one asserting it. And
+the disagreement is informative: the published Monte Carlo figure sits **0.0087
+below** the lattice, which is the downward bias LSMC's own theory predicts — an
+exercise rule fitted from a finite sample is suboptimal, and a suboptimal rule
+under-prices. Seeing the bias with the right sign and a plausible size checks
+both methods at once.
+
+### A step count is not evidence of accuracy
+
+```bash
+quantos lattice --spot 100 --strike 105
+```
+
+Binomial convergence is **not monotone**. Over step counts 30 to 150 the error
+changes sign **82 times**, because the strike sits between terminal nodes and its
+position cycles as `n` changes. The trinomial error changes sign **twice**.
+
+So "I used 200 steps" says nothing. Every price here reports its own
+step-to-step oscillation, and flags the case where that oscillation exceeds the
+apparent error — at `n = 500` the plain lattice lands within 6.2e-4 of
+Black-Scholes, which looks like accuracy and is mostly luck.
+
+Averaging `n` with `n+1` cancels most of the oscillation, and the honest version
+of that claim is in the code: it halves the mean absolute error and improves the
+worst case, but it is better on **74%** of step counts, not all. When `n` and
+`n+1` land on the same side of the oscillation their mean is no better than
+either. [`lattice.py`](src/quantos/derivatives/lattice.py) is the first module
+here to reach a **100% mutation score**.
+
 ## Stress testing against crises that actually happened
 
 A simulated shock tells you what your model thinks. A dated historical window
@@ -752,6 +793,7 @@ Read in this order if you want the argument rather than the API.
 | [`core/stats/multipletest.py`](src/quantos/core/stats/multipletest.py) | White's Reality Check, Hansen's SPA, Romano-Wolf StepM. |
 | [`core/timeseries/`](src/quantos/core/timeseries) | OLS with HAC errors, GARCH/GJR-GARCH MLE, exact OU estimation, Engle-Granger and Johansen cointegration. |
 | [`derivatives/black_scholes.py`](src/quantos/derivatives/black_scholes.py) | Full Greek set (through vanna/volga/charm), safeguarded implied volatility. |
+| [`derivatives/lattice.py`](src/quantos/derivatives/lattice.py) | CRR binomial and Boyle trinomial trees, and the oscillation that makes a step count meaningless on its own. |
 | [`planning/calculator.py`](src/quantos/planning/calculator.py) | Compound-interest projection matched to a published schedule, and the distribution it hides. |
 | [`risk/stress.py`](src/quantos/risk/stress.py) | Historical crisis replay, with survivorship refused rather than papered over. |
 | [`risk/`](src/quantos/risk) | Coherent risk measures, Ledoit-Wolf shrinkage, HRP, risk parity, Kelly. |

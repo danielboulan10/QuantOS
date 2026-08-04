@@ -1070,6 +1070,52 @@ def cmd_intraday(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_lattice(args: argparse.Namespace) -> int:
+    """Price on a lattice, and show what the step count is actually worth."""
+    from quantos.derivatives.black_scholes import OptionType
+    from quantos.derivatives.lattice import (
+        averaged_binomial_price,
+        binomial_price,
+        convergence_path,
+        trinomial_price,
+    )
+
+    option_type = OptionType.PUT if args.put else OptionType.CALL
+    shared = {
+        "rate": args.rate,
+        "dividend_yield": args.dividend_yield,
+        "option_type": option_type,
+        "american": args.american,
+    }
+    args_positional = (args.spot, args.strike, args.expiry, args.volatility)
+
+    print(binomial_price(*args_positional, n_steps=args.steps, **shared).summary())
+    print()
+    print(averaged_binomial_price(*args_positional, n_steps=args.steps, **shared).summary())
+    print()
+    print(trinomial_price(*args_positional, n_steps=args.steps, **shared).summary())
+
+    if args.american or args.put:
+        return 0
+
+    counts, binomial, trinomial = convergence_path(
+        *args_positional,
+        rate=args.rate,
+        dividend_yield=args.dividend_yield,
+        option_type=option_type,
+        steps=range(30, 151),
+    )
+    flips = int(np.sum(np.diff(np.sign(binomial)) != 0))
+    tri_flips = int(np.sum(np.diff(np.sign(trinomial)) != 0))
+    print(
+        f"\nAcross {counts.size} step counts the binomial error changes sign "
+        f"{flips} times and the trinomial {tri_flips}. Convergence is not "
+        "monotone, so a price quoted at one convenient step count is a point on "
+        "an oscillation rather than a converged value."
+    )
+    return 0
+
+
 def cmd_stress(args: argparse.Namespace) -> int:
     """Replay an instrument through crises that actually happened."""
     import numpy as np
@@ -1448,6 +1494,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--session", type=int, default=0, help="which session to analyse in detail")
     p.add_argument("--compare", default=None, help="second intraday file, for the Epps curve")
     p.set_defaults(func=cmd_intraday)
+
+    p = sub.add_parser("lattice", help="binomial and trinomial option pricing")
+    p.add_argument("--spot", type=float, default=100.0)
+    p.add_argument("--strike", type=float, default=105.0)
+    p.add_argument("--expiry", type=float, default=1.0, help="years")
+    p.add_argument("--volatility", type=float, default=0.25)
+    p.add_argument("--rate", type=float, default=0.04)
+    p.add_argument("--dividend-yield", type=float, default=0.0)
+    p.add_argument("--steps", type=int, default=500)
+    p.add_argument("--put", action="store_true")
+    p.add_argument("--american", action="store_true")
+    p.set_defaults(func=cmd_lattice)
 
     p = sub.add_parser("stress", help="replay an instrument through real historical crises")
     p.add_argument("--ticker", required=True)

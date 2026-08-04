@@ -40,6 +40,7 @@ graph TD
     subgraph pricing ["Derivatives &amp; risk"]
         BS["derivatives/black_scholes.py<br/>full Greek set"]
         AM["derivatives/american.py<br/>LSMC + dual upper bound"]
+        LAT["derivatives/lattice.py<br/>CRR binomial · Boyle trinomial"]
         HES["derivatives/heston.py<br/>Fourier inversion"]
         MM["derivatives/market_making.py"]
         RISK["risk/<br/>VaR backtest · EVT · HRP · Kelly"]
@@ -53,7 +54,7 @@ graph TD
 
     subgraph honesty ["Held to account by CI"]
         LEDGER["live/ledger.py<br/>hash-chained forward record"]
-        CLAIMS["scripts/verify_claims.py<br/>21 documented claims re-derived"]
+        CLAIMS["scripts/verify_claims.py<br/>23 documented claims re-derived"]
         MUT["scripts/mutation_test.py<br/>are the tests load-bearing?"]
     end
 
@@ -76,6 +77,8 @@ graph TD
     BS --> SVI
     BS --> MM
     HES --> AM
+    BS --> LAT
+    LAT --> AM
     BOOK --> AGENTS
     MICRO --> VAL
 
@@ -109,7 +112,7 @@ the leaderboard being updated to say so.
 | Mechanism | What it prevents |
 |---|---|
 | [`live/ledger.py`](../src/quantos/live/ledger.py) | Predictions are appended to a hash-chained record before the outcome is known, so a forecast cannot be quietly revised after the fact. Overlapping horizons are discounted by greedy interval scheduling rather than double-counted. |
-| [`scripts/verify_claims.py`](../scripts/verify_claims.py) | Documentation rots silently — a refactor moves a constant and the prose keeps quoting the old figure. Twenty-one documented claims are re-derived on every push. |
+| [`scripts/verify_claims.py`](../scripts/verify_claims.py) | Documentation rots silently — a refactor moves a constant and the prose keeps quoting the old figure. Twenty-three documented claims are re-derived on every push. |
 | [`scripts/mutation_test.py`](../scripts/mutation_test.py) | Coverage says a line ran, not that anything checked it. Mutating the source and requiring a test to fail is the difference. It found a module at **0%** — no test file existed at all. |
 
 ## Data flow for a single ticker
