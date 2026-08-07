@@ -8,7 +8,7 @@ because the researcher saw the data before choosing the strategy. Nothing here
 did. Whatever this table eventually says is simply what happened.
 
 - **Started:** 2026-07-24
-- **Last updated:** 2026-08-05
+- **Last updated:** 2026-08-07
 - **Universe:** BTC-USD, EFA, GLD, IWM, QQQ, SPY, TLT, USO
 - **Signals:** 9 pre-registered
 - **Records:** 72 (72 predictions)
