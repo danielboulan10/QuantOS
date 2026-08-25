@@ -8,22 +8,22 @@ because the researcher saw the data before choosing the strategy. Nothing here
 did. Whatever this table eventually says is simply what happened.
 
 - **Started:** 2026-07-24
-- **Last updated:** 2026-08-24
+- **Last updated:** 2026-08-25
 - **Universe:** BTC-USD, EFA, GLD, IWM, QQQ, SPY, TLT, USO
 - **Signals:** 9 pre-registered
-- **Records:** 198 (135 predictions)
+- **Records:** 216 (144 predictions)
 - **Hash chain:** intact — no record has been edited or removed
 
 ## Overall
 
 | Measure                        | Value                     |
 |--------------------------------|---------------------------|
-| Settled predictions            | 63                        |
-| Effective (independent) sample | 1  (overlap factor 63.0x) |
+| Settled predictions            | 72                        |
+| Effective (independent) sample | 1  (overlap factor 72.0x) |
 | Still open                     | 72                        |
-| Hit rate                       | 50.8%                     |
-| 95% interval                   | 5.6% to 94.7%             |
-| Mean return per prediction     | +0.954%                   |
+| Hit rate                       | 47.2%                     |
+| 95% interval                   | 4.9% to 93.9%             |
+| Mean return per prediction     | +0.291%                   |
 | Beats a coin flip at 95%?      | not established           |
 
 The hit rate uses every settled prediction; the interval uses the
@@ -35,18 +35,18 @@ how a forward record talks itself into significance it has not earned.
 
 | Signal              | Settled | Independent | Hit rate | 95% interval | Mean   |
 |---------------------|---------|-------------|----------|--------------|--------|
-| ma_cross_50_200     | 7       | 1           | 71%      | 11%-98%      | -0.45% |
-| momentum_126d       | 7       | 1           | 71%      | 11%-98%      | -0.45% |
-| momentum_252d       | 7       | 1           | 71%      | 11%-98%      | +3.24% |
-| vol_scaled_momentum | 7       | 1           | 71%      | 11%-98%      | +3.24% |
-| ma_cross_20_50      | 7       | 1           | 57%      | 7%-96%       | -0.64% |
-| momentum_21d        | 7       | 1           | 57%      | 7%-96%       | +1.91% |
-| mean_reversion_21d  | 7       | 1           | 43%      | 4%-93%       | +1.26% |
-| mean_reversion_5d   | 7       | 1           | 14%      | 0%-85%       | +0.45% |
-| breakout_63d        | 7       | 1           | 0%       | 0%-79%       | +0.00% |
+| ma_cross_20_50      | 8       | 1           | 62%      | 8%-97%       | +1.88% |
+| ma_cross_50_200     | 8       | 1           | 62%      | 8%-97%       | -2.83% |
+| momentum_126d       | 8       | 1           | 62%      | 8%-97%       | -2.83% |
+| momentum_21d        | 8       | 1           | 62%      | 8%-97%       | +4.12% |
+| momentum_252d       | 8       | 1           | 62%      | 8%-97%       | +0.39% |
+| vol_scaled_momentum | 8       | 1           | 62%      | 8%-97%       | +0.39% |
+| mean_reversion_21d  | 8       | 1           | 38%      | 3%-92%       | +1.10% |
+| mean_reversion_5d   | 8       | 1           | 12%      | 0%-84%       | +0.40% |
+| breakout_63d        | 8       | 1           | 0%       | 0%-79%       | +0.00% |
 
-With 7 directionally distinct signals tracked, the best-looking one
-is expected to look good by chance. A single-signal claim needs p < 0.0071
+With 8 directionally distinct signals tracked, the best-looking one
+is expected to look good by chance. A single-signal claim needs p < 0.0063
 after Bonferroni correction, not p < 0.05 — and the intervals above are not
 corrected for that, so read the best row with suspicion.
 
@@ -56,10 +56,9 @@ Only the *sign* of each signal's position is recorded, so signals that
 differ only in how large a bet they take collapse to the same prediction.
 Detected from the records themselves:
 
-- `ma_cross_50_200` == `momentum_126d`
 - `momentum_252d` == `vol_scaled_momentum`
 
-They are counted once for the correction above (7 distinct, not
+They are counted once for the correction above (8 distinct, not
 9). Volatility scaling changes position size, and size is not
 what a direction-only record scores — so the scaled variant is currently
 indistinguishable from its unscaled parent. Scoring size-weighted returns
