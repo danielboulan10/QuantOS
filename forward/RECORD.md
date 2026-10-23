@@ -11,7 +11,7 @@ did. Whatever this table eventually says is simply what happened.
 - **Last updated:** 2026-10-23
 - **Universe:** BTC-USD, EFA, GLD, IWM, QQQ, SPY, TLT, USO
 - **Signals:** 9 pre-registered
-- **Records:** 423 (216 predictions)
+- **Records:** 486 (279 predictions)
 - **Hash chain:** intact — no record has been edited or removed
 
 ## Overall
@@ -20,7 +20,7 @@ did. Whatever this table eventually says is simply what happened.
 |--------------------------------|---------------------------|
 | Settled predictions            | 207                       |
 | Effective (independent) sample | 3  (overlap factor 69.0x) |
-| Still open                     | 9                         |
+| Still open                     | 72                        |
 | Hit rate                       | 44.0%                     |
 | 95% interval                   | 10.0% to 84.7%            |
 | Mean return per prediction     | +0.398%                   |
