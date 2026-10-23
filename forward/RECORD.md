@@ -8,22 +8,22 @@ because the researcher saw the data before choosing the strategy. Nothing here
 did. Whatever this table eventually says is simply what happened.
 
 - **Started:** 2026-07-24
-- **Last updated:** 2026-10-22
+- **Last updated:** 2026-10-23
 - **Universe:** BTC-USD, EFA, GLD, IWM, QQQ, SPY, TLT, USO
 - **Signals:** 9 pre-registered
-- **Records:** 360 (216 predictions)
+- **Records:** 423 (216 predictions)
 - **Hash chain:** intact — no record has been edited or removed
 
 ## Overall
 
 | Measure                        | Value                     |
 |--------------------------------|---------------------------|
-| Settled predictions            | 144                       |
-| Effective (independent) sample | 2  (overlap factor 72.0x) |
-| Still open                     | 72                        |
-| Hit rate                       | 44.4%                     |
-| 95% interval                   | 7.6% to 88.6%             |
-| Mean return per prediction     | +0.358%                   |
+| Settled predictions            | 207                       |
+| Effective (independent) sample | 3  (overlap factor 69.0x) |
+| Still open                     | 9                         |
+| Hit rate                       | 44.0%                     |
+| 95% interval                   | 10.0% to 84.7%            |
+| Mean return per prediction     | +0.398%                   |
 | Beats a coin flip at 95%?      | not established           |
 
 The hit rate uses every settled prediction; the interval uses the
@@ -35,15 +35,15 @@ how a forward record talks itself into significance it has not earned.
 
 | Signal              | Settled | Independent | Hit rate | 95% interval | Mean   |
 |---------------------|---------|-------------|----------|--------------|--------|
-| momentum_126d       | 16      | 2           | 69%      | 17%-96%      | +0.25% |
-| ma_cross_50_200     | 16      | 2           | 62%      | 14%-94%      | -0.64% |
-| ma_cross_20_50      | 16      | 2           | 56%      | 12%-93%      | +0.97% |
-| momentum_21d        | 16      | 2           | 56%      | 12%-93%      | +1.21% |
-| momentum_252d       | 16      | 2           | 56%      | 12%-93%      | -0.06% |
-| vol_scaled_momentum | 16      | 2           | 56%      | 12%-93%      | -0.06% |
-| mean_reversion_21d  | 16      | 2           | 25%      | 3%-80%       | +1.07% |
-| mean_reversion_5d   | 16      | 2           | 19%      | 2%-77%       | +1.02% |
-| breakout_63d        | 16      | 2           | 0%       | 0%-66%       | -0.52% |
+| momentum_126d       | 23      | 3           | 65%      | 20%-93%      | +0.47% |
+| momentum_21d        | 23      | 3           | 65%      | 20%-93%      | +1.37% |
+| ma_cross_50_200     | 23      | 3           | 61%      | 18%-92%      | -0.15% |
+| ma_cross_20_50      | 23      | 3           | 57%      | 16%-90%      | +0.83% |
+| momentum_252d       | 23      | 3           | 52%      | 14%-88%      | -0.06% |
+| vol_scaled_momentum | 23      | 3           | 52%      | 14%-88%      | -0.06% |
+| mean_reversion_21d  | 23      | 3           | 22%      | 3%-72%       | +0.84% |
+| mean_reversion_5d   | 23      | 3           | 13%      | 1%-66%       | +0.61% |
+| breakout_63d        | 23      | 3           | 9%       | 1%-63%       | -0.26% |
 
 With 8 directionally distinct signals tracked, the best-looking one
 is expected to look good by chance. A single-signal claim needs p < 0.0063
